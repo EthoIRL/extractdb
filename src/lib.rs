@@ -10,7 +10,6 @@ use std::thread;
 
 pub struct Extractdb<V: Send + Sync + Eq + Hash> {
     data_store: Arc<RwLock<HashSet<V>>>,
-
     data_sender: Sender<V>,
 
     accessible_store: RwLock<Vec<V>>,
@@ -55,7 +54,7 @@ impl<V: Send + Sync + Eq + Hash + 'static> Extractdb<V> {
         }
     }
 
-    pub fn add(&mut self, item: V) -> Result<(), SendError<V>>{
+    pub fn push(&mut self, item: V) -> Result<(), SendError<V>>{
         self.data_sender.send(item)
     }
 
@@ -77,7 +76,7 @@ mod tests {
         let mut database: Extractdb<String> = Extractdb::new::<String>();
 
         for x in 0..125000 {
-            database.add(String::from(format!("{:?}", x))).unwrap();
+            database.push(String::from(format!("{:?}", x))).unwrap();
         }
 
         assert_ne!(database.internal_count().unwrap(), 0);
