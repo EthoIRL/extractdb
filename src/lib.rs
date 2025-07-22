@@ -8,6 +8,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::mpsc::SendError;
 use std::thread;
 
+// Since our database domain is "static" in nature (Once data enters it never leaves the data_store).
+// We could theoretically return a reference during fetch operations instead of a cloned copy.
 pub struct Extractdb<V: Send + Sync + Eq + Hash> {
     data_store: Arc<RwLock<HashSet<V>>>,
     data_sender: Sender<V>,
