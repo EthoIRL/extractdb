@@ -111,7 +111,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn add_appends_data_success() {
+    fn push_data_success() {
         let mut database: Extractdb<String> = Extractdb::new::<String>();
 
         for x in 0..125000 {
