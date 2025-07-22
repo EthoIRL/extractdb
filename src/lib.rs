@@ -80,11 +80,11 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
 
             return match value {
                 Some(value) => Ok(value.clone()),
-                None => Err("No new data could be retrieved from temporary accessible_store".into())
+                None => Err("No new data could be retrieved from accessible_store".into())
             }
         }
 
-        Err("Failed to access data from leaky accessible_store".into())
+        Err("Failed to access data from accessible_store".into())
     }
 
     pub fn count(&self) -> Result<usize, Box<dyn Error>> {
