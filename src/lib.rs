@@ -105,6 +105,7 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
     use super::*;
 
     #[test]
@@ -114,6 +115,7 @@ mod tests {
         for x in 0..125000 {
             database.push(String::from(format!("{:?}", x))).unwrap();
         }
+        thread::sleep(Duration::from_millis(10));
 
         assert_ne!(database.internal_count().unwrap(), 0);
     }
@@ -123,6 +125,7 @@ mod tests {
         let mut database: Extractdb<i64> = Extractdb::new::<i64>();
 
         database.push(01010202030304040505).unwrap();
+        thread::sleep(Duration::from_millis(10));
 
         assert_eq!(database.fetch_next().unwrap(), 01010202030304040505);
     }
