@@ -56,7 +56,7 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
         }
     }
 
-    pub fn push(&mut self, item: V) -> Result<(), SendError<V>>{
+    pub fn push(&self, item: V) -> Result<(), SendError<V>>{
         self.data_sender.send(item)
     }
 
