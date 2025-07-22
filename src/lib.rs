@@ -4,15 +4,12 @@ use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::mpsc::SendError;
 use std::thread;
 
 // Since our database domain is "static" in nature (Once data enters it never leaves the data_store).
 // We could theoretically return a reference during fetch operations instead of a cloned copy.
 pub struct Extractdb<V: Send + Sync + Eq + Hash> {
-    data_store: Arc<RwLock<HashSet<V>>>,
-    data_sender: Sender<V>,
+    data_store: RwLock<HashSet<V>>,
 
     accessible_store: RwLock<Vec<V>>,
     accessible_index: AtomicUsize
@@ -20,42 +17,22 @@ pub struct Extractdb<V: Send + Sync + Eq + Hash> {
 
 impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
     pub fn new<K: Send + Sync + Eq + Hash + Clone + 'static>() -> Extractdb<V> {
-        let (tx, rx) = channel();
-
-        let data_store = Arc::new(RwLock::new(HashSet::new()));
-        let internal_data_clone = Arc::clone(&data_store);
-
-        let database = Extractdb {
-            data_store,
-            data_sender: tx,
+        Extractdb {
+            data_store: RwLock::new(HashSet::new()),
             accessible_store: RwLock::new(Vec::new()),
             accessible_index: AtomicUsize::new(0)
-        };
-
-        thread::spawn(move || Self::internal_receiver(rx, internal_data_clone));
-
-        database
-    }
-
-    fn internal_receiver(rx: Receiver<V>, data_store: Arc<RwLock<HashSet<V>>>) {
-        loop {
-            // Optimistic receiver
-            while let Ok(value) = rx.try_recv() {
-                if let Ok(mut internal_set) = data_store.write() {
-                    internal_set.insert(value);
-                }
-            }
-
-            if let Ok(value) = rx.recv() {
-                if let Ok(mut internal_set) = data_store.write() {
-                    internal_set.insert(value);
-                }
-            }
         }
     }
 
-    pub fn push(&self, item: V) -> Result<(), SendError<V>>{
-        self.data_sender.send(item)
+    pub fn push(&self, item: V) -> Result<(), Box<dyn Error>>{
+        if let Ok(mut data_store) = self.data_store.write() {
+            return match data_store.insert(item) {
+                true => Ok(()),
+                false => Err("Failed to insert item into data_store".into())
+            }
+        }
+
+        Err("Failed to access writer during item insertion of data_store".into())
     }
 
     pub fn fetch_next(&mut self) -> Result<V, Box<dyn Error + '_>> {
