@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn push_data_success() {
-        let mut database: Extractdb<String> = Extractdb::new::<String>();
+        let database: Extractdb<String> = Extractdb::new::<String>();
 
         for x in 0..125000 {
             database.push(String::from(format!("{:?}", x))).unwrap();
@@ -106,11 +106,11 @@ mod tests {
 
     #[test]
     fn push_multi_thread_success() {
-        let mut database: Arc<Extractdb<String>> = Arc::new(Extractdb::new::<String>());
+        let database: Arc<Extractdb<String>> = Arc::new(Extractdb::new::<String>());
 
         let mut threads = Vec::new();
         for thread_id in 0..4 {
-            let mut reference_database = Arc::clone(&database);
+            let reference_database = Arc::clone(&database);
             threads.push(thread::spawn(move || {
                 for count in 0..12500 {
                     reference_database.push(format!("{}-{}", thread_id, count)).unwrap();
