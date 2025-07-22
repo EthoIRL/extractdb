@@ -40,12 +40,10 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
     fn internal_receiver(rx: Receiver<V>, data_store: Arc<RwLock<HashSet<V>>>) {
         loop {
             // Optimistic receiver
-            if let Ok(value) = rx.try_recv() {
+            while let Ok(value) = rx.try_recv() {
                 if let Ok(mut internal_set) = data_store.write() {
                     internal_set.insert(value);
                 }
-
-                continue
             }
 
             if let Ok(value) = rx.recv() {
