@@ -117,4 +117,13 @@ mod tests {
 
         assert_ne!(database.internal_count().unwrap(), 0);
     }
+
+    #[test]
+    fn fetch_data_success() {
+        let mut database: Extractdb<i64> = Extractdb::new::<i64>();
+
+        database.push(01010202030304040505).unwrap();
+
+        assert_eq!(database.fetch_next().unwrap(), 01010202030304040505);
+    }
 }
