@@ -3,7 +3,7 @@ A thread-safe, in-memory value store supporting concurrent reads and writes.<br/
 This is not a traditional kv-store, as it does not use any form of keys.
 
 # Guarantees.
-- Fetching is guaranteed persistent FIFO
+- Fetching is guaranteed however out-of-order (Not FIFO/FILO)
 - Fetching & Pushing is thread-safe
 
 [//]: # (- Removing from permanent store is possible but heavily degraded during fetch/push operations.)
