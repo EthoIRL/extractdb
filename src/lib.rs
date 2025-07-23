@@ -6,29 +6,57 @@ use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
-// Since our database domain is "static" in nature (Once data enters it never leaves the data_store).
-// We could theoretically return a reference during fetch operations instead of a cloned copy.
-pub struct Extractdb<V: Send + Sync + Eq + Hash> {
-    data_store: RwLock<HashSet<V>>,
+use crossbeam_utils::CachePadded;
+use rand::Rng;
+
+const SHARD_COUNT: usize = 64;
+
+pub struct Extractdb<V: Send + Sync + Eq + Hash + 'static> {
+    data_store_shards: Vec<CachePadded<RwLock<HashSet<V>>>>,
 
     accessible_store: RwLock<Vec<V>>,
-    accessible_index: AtomicUsize
+    accessible_index: CachePadded<AtomicUsize>,
 }
 
 impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
     pub fn new<K: Send + Sync + Eq + Hash + Clone + 'static>() -> Extractdb<V> {
+        let shards = (0..SHARD_COUNT-1)
+            .map(|_| CachePadded::new(RwLock::new(HashSet::new())))
+            .collect();
+
         Extractdb {
-            data_store: RwLock::new(HashSet::new()),
+            data_store_shards: shards,
             accessible_store: RwLock::new(Vec::new()),
-            accessible_index: AtomicUsize::new(0)
+            accessible_index: CachePadded::new(AtomicUsize::new(0))
         }
     }
 
-    pub fn push(&self, item: V) -> Result<(), Box<dyn Error>>{
-        if let Ok(mut data_store) = self.data_store.write() {
-            return match data_store.insert(item) {
-                true => Ok(()),
-                false => Err("Failed to insert item into data_store".into())
+    pub fn push(&self, item: V) -> Result<(), Box<dyn Error>> {
+        let mut shard: Option<RwLockWriteGuard<HashSet<V>>> = None;
+        for data_store_shard in &self.data_store_shards {
+            if let Ok(data_shard) = data_store_shard.try_write() {
+                shard = Some(data_shard);
+                break;
+            }
+        }
+
+        match shard {
+            Some(mut shard) => {
+                return match shard.insert(item) {
+                    true => Ok(()),
+                    false => Err("Failed to insert item into data_store".into())
+                };
+            },
+            None => {
+                let vec = rand::random_range(0usize..SHARD_COUNT-1);
+                let data_store = self.data_store_shards.get(vec).unwrap();
+
+                if let Ok(mut data_store) = data_store.write() {
+                    return match data_store.insert(item) {
+                        true => Ok(()),
+                        false => Err("Failed to insert item into data_store".into())
+                    }
+                }
             }
         }
 
@@ -44,11 +72,15 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
         // The problem with this only occurs later on in large sets when the accessible_store index is small and the data_store is large.
         // After reaching the end it loads a massive amount of memory (e.g. the entire data_store) causing deadlocks and slowdowns.
         if accessible_index >= accessible_store_len {
-            let data_store_reader = self.data_store.read()?;
-            let mut accessible_store_writer =  self.accessible_store.write()?;
+            let mut local_vec: Vec<V> = Vec::new();
+            for data_store_shard in &self.data_store_shards {
+                let data_store_reader = data_store_shard.read()?;
 
-            // TODO: There might a better way to handle data loading from data_store to accessible_store
-            *accessible_store_writer = Vec::from_iter(data_store_reader.deref().clone());
+                local_vec.extend(Vec::from_iter(data_store_reader.deref().clone()));
+            }
+
+            let mut accessible_store_writer =  self.accessible_store.write()?;
+            *accessible_store_writer = local_vec;
         }
 
         self.accessible_index.fetch_add(1, Ordering::Relaxed);
@@ -72,21 +104,26 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
     }
 
     pub fn internal_count(&self) -> Result<usize, Box<dyn Error + Send + Sync>> {
-        if let Ok(locked_store) = self.data_store.read() {
-            return Ok(locked_store.len());
+        let mut global_shard_size = 0;
+        for data_store_shard in &self.data_store_shards {
+            if let Ok(locked_store) = data_store_shard.read() {
+                global_shard_size += locked_store.len()
+            }
         }
 
-        Err("Failed to retrieve internal count of data_store".into())
+        return Ok(global_shard_size);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+    use dashmap::DashSet;
     use super::*;
 
     #[test]
     fn push_data_success() {
-        let database: Extractdb<String> = Extractdb::new::<String>();
+        let mut database: Extractdb<String> = Extractdb::new::<String>();
 
         for x in 0..125000 {
             database.push(String::from(format!("{:?}", x))).unwrap();
@@ -123,5 +160,44 @@ mod tests {
         }
 
         assert_eq!(database.internal_count().unwrap(), 50000);
+    }
+
+    #[test]
+    fn benchmark() {
+        let dashmap: Arc<DashSet<String>> = Arc::new(DashSet::new());
+
+        let mut threads = Vec::new();
+        let start = Instant::now();
+        for thread_id in 0..48 {
+            let reference_database = Arc::clone(&dashmap);
+            threads.push(thread::spawn(move || {
+                for count in 0..1250000 {
+                    reference_database.insert(format!("{}-{}", thread_id, count));
+                }
+            }));
+        }
+
+        for thread in threads {
+            thread.join().expect("Thread panicked during push");
+        }
+        println!("DashSet: {:?} {}", start.elapsed(), dashmap.shards().len());
+
+        let database: Arc<Extractdb<String>> = Arc::new(Extractdb::new::<String>());
+        let mut threads = Vec::new();
+        let start = Instant::now();
+        for thread_id in 0..48 {
+            let reference_database = Arc::clone(&database);
+            threads.push(thread::spawn(move || {
+                for count in 0..1250000 {
+                    reference_database.push(format!("{}-{}", thread_id, count)).unwrap();
+                }
+            }));
+        }
+
+        for thread in threads {
+            thread.join().expect("Thread panicked during push");
+        }
+
+        println!("ExtractDB: {:?}", start.elapsed())
     }
 }
