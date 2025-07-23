@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::hash::Hash;
 use std::ops::Deref;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockWriteGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
