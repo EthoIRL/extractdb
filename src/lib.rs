@@ -46,7 +46,7 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
     }
 
     pub fn fetch_next(&self) -> Result<V, Box<dyn Error + '_>> {
-        let accessible_index = self.accessible_index.load(Ordering::Relaxed);
+        let accessible_index = self.accessible_index.fetch_add(1, Ordering::AcqRel);
         let accessible_store_len = self.count()?;
 
         // TODO: While this is a basic "algorithm" it could be improved...
@@ -57,7 +57,6 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
             self.load_shards_to_accessible()?;
         }
 
-        self.accessible_index.fetch_add(1, Ordering::Relaxed);
         if let Ok(accessible_store_reader) = self.accessible_store.read() {
             let value = accessible_store_reader.get(accessible_index);
 
