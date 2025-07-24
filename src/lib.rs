@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::hash::Hash;
 use std::ops::Deref;
+use std::ptr::eq;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
@@ -43,6 +44,41 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
         }
 
         self.push(item)
+    }
+
+    pub fn remove(&self, item: &V) {
+        let mut item_with_shard: Option<&CachePadded<RwLock<HashSet<V>>>> = None;
+
+        for data_store_shard in &self.data_store_shards {
+            if let Ok(data_shard_reader) = data_store_shard.try_read() {
+                if data_shard_reader.is_empty() {
+                    continue
+                }
+
+                if data_shard_reader.contains(item) {
+                    item_with_shard = Some(data_store_shard);
+                    break
+                }
+            }
+        }
+
+        if let Some(shard) = item_with_shard {
+            if let Ok(mut shard_writer) = shard.write() {
+                shard_writer.remove(item);
+            }
+
+            let mut item_in_accessible: Option<usize> = None;
+
+            if let Ok(accessible_store_reader) = self.accessible_store.read() {
+                item_in_accessible = accessible_store_reader.iter().position(|x| eq(x, item));
+            }
+
+            if let Some(position) = item_in_accessible {
+                if let Ok(mut accessible_store_writer) = self.accessible_store.write() {
+                    accessible_store_writer.remove(position);
+                }
+            }
+        }
     }
 
     pub fn fetch_next(&self) -> Result<V, Box<dyn Error + '_>> {
