@@ -46,7 +46,7 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
         self.push(item)
     }
 
-    pub fn fetch_next(&mut self) -> Result<V, Box<dyn Error + '_>> {
+    pub fn fetch_next(&self) -> Result<V, Box<dyn Error + '_>> {
         let accessible_index = self.accessible_index.load(Ordering::Relaxed);
         let accessible_store_len = self.count()?;
 
