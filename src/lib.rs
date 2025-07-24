@@ -55,15 +55,15 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
         // The problem with this only occurs later on in large sets when the accessible_store index is small and the data_store is large.
         // After reaching the end it loads a massive amount of memory (e.g. the entire data_store) causing deadlocks and slowdowns.
         if accessible_index >= accessible_store_len {
-            let mut local_vec: Vec<V> = Vec::new();
-            for data_store_shard in &self.data_store_shards {
-                let data_store_reader = data_store_shard.read()?;
+            if let Ok(mut accessible_store_writer) = self.accessible_store.write() {
+                let mut local_vec: Vec<V> = Vec::new();
+                for data_store_shard in &self.data_store_shards {
+                    let data_store_reader = data_store_shard.read()?;
+                    local_vec.extend(Vec::from_iter(data_store_reader.deref().clone()));
+                }
 
-                local_vec.extend(Vec::from_iter(data_store_reader.deref().clone()));
+                *accessible_store_writer = local_vec;
             }
-
-            let mut accessible_store_writer =  self.accessible_store.write()?;
-            *accessible_store_writer = local_vec;
         }
 
         self.accessible_index.fetch_add(1, Ordering::Relaxed);
