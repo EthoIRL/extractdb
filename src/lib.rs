@@ -32,35 +32,18 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
     }
 
     pub fn push(&self, item: V) -> Result<(), Box<dyn Error>> {
-        let mut shard: Option<RwLockWriteGuard<HashSet<V>>> = None;
-        for data_store_shard in &self.data_store_shards {
-            if let Ok(data_shard) = data_store_shard.try_write() {
-                shard = Some(data_shard);
-                break;
-            }
-        }
+        let shard_index = fastrand::usize(0usize..SHARD_COUNT);
 
-        match shard {
-            Some(mut shard) => {
-                return match shard.insert(item) {
+        if let Some(data_store_shard) = self.data_store_shards.get(shard_index) {
+            if let Ok(mut data_store) = data_store_shard.try_write() {
+                return match data_store.insert(item) {
                     true => Ok(()),
                     false => Err("Failed to insert item into data_store".into())
-                };
-            },
-            None => {
-                let vec = rand::random_range(0usize..SHARD_COUNT-1);
-                let data_store = self.data_store_shards.get(vec).unwrap();
-
-                if let Ok(mut data_store) = data_store.write() {
-                    return match data_store.insert(item) {
-                        true => Ok(()),
-                        false => Err("Failed to insert item into data_store".into())
-                    }
                 }
             }
         }
 
-        Err("Failed to access writer during item insertion of data_store".into())
+        self.push(item)
     }
 
     pub fn fetch_next(&mut self) -> Result<V, Box<dyn Error + '_>> {
