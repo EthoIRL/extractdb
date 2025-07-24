@@ -9,7 +9,7 @@ use std::thread;
 use crossbeam_utils::CachePadded;
 use rand::Rng;
 
-const SHARD_COUNT: usize = 64;
+const SHARD_COUNT: usize = 16;
 
 pub struct Extractdb<V: Send + Sync + Eq + Hash + 'static> {
     data_store_shards: Vec<CachePadded<RwLock<HashSet<V>>>>,
