@@ -20,7 +20,7 @@ pub struct Extractdb<V: Send + Sync + Eq + Hash + 'static> {
 
 impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
     pub fn new<K: Send + Sync + Eq + Hash + Clone + 'static>() -> Extractdb<V> {
-        let shards = (0..SHARD_COUNT-1)
+        let shards = (0..SHARD_COUNT)
             .map(|_| CachePadded::new(RwLock::new(HashSet::new())))
             .collect();
 
