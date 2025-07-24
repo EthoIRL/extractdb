@@ -2,12 +2,11 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::hash::Hash;
 use std::ops::Deref;
-use std::sync::{Arc, RwLock, RwLockWriteGuard};
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
 use crossbeam_utils::CachePadded;
-use rand::Rng;
 
 const SHARD_COUNT: usize = 16;
 
@@ -55,15 +54,7 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
         // The problem with this only occurs later on in large sets when the accessible_store index is small and the data_store is large.
         // After reaching the end it loads a massive amount of memory (e.g. the entire data_store) causing deadlocks and slowdowns.
         if accessible_index >= accessible_store_len {
-            if let Ok(mut accessible_store_writer) = self.accessible_store.write() {
-                let mut local_vec: Vec<V> = Vec::new();
-                for data_store_shard in &self.data_store_shards {
-                    let data_store_reader = data_store_shard.read()?;
-                    local_vec.extend(Vec::from_iter(data_store_reader.deref().clone()));
-                }
-
-                *accessible_store_writer = local_vec;
-            }
+            self.load_shards_to_accessible()?;
         }
 
         self.accessible_index.fetch_add(1, Ordering::Relaxed);
@@ -95,6 +86,30 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
         }
 
         return Ok(global_shard_size);
+    }
+
+    fn load_shards_to_accessible(&self) -> Result<(), Box<dyn Error + '_>>  {
+        if let Ok(mut accessible_store) = self.accessible_store.write() {
+            let mut items_to_add: Vec<V> = Vec::new();
+
+            for data_store_shard in &self.data_store_shards {
+                let data_store_reader = data_store_shard.read()?;
+
+                for data_store_item in data_store_reader.iter() {
+                    if !accessible_store.contains(&data_store_item) {
+                        items_to_add.push(data_store_item.clone())
+                    }
+                }
+            }
+
+            for item in items_to_add {
+                accessible_store.push(item);
+            }
+
+            return Ok(())
+        }
+
+        Err("Failed to load sharded data into accessible_store vector".into())
     }
 }
 
