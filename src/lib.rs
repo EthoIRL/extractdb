@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+#![doc = include_str!("../README.md")]
 use hashbrown::HashSet;
 use std::error::Error;
 use std::hash::{BuildHasher, Hash, RandomState};
