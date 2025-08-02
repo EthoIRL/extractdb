@@ -61,7 +61,8 @@ impl<V> ExtractDb<V>
         false
     }
 
-    /// Fetches the next item in a internal non-mutable vector
+    /// Fetches the next item in a internal non-mutable vector.
+    ///
     /// This is not a FIFO/FILO function and is unordered with no guarantees.
     ///
     /// # Returns
@@ -126,6 +127,7 @@ impl<V> ExtractDb<V>
     }
 
     /// Get the internal count of items in all shards. This represents the total amount of items in the database at any time.
+    ///
     /// This function is impacted by writes and may be slowed.
     ///
     /// # Returns
