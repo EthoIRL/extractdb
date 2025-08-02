@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use hashbrown::HashSet;
 use std::error::Error;
 use std::hash::{BuildHasher, Hash, RandomState};
 use std::ops::Deref;
