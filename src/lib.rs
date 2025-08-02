@@ -8,7 +8,7 @@ use std::thread;
 
 const SHARD_COUNT: usize = 16;
 
-pub struct Extractdb<V>
+pub struct ExtractDb<V>
     where
         V: Eq + Hash + Clone
 {
@@ -19,16 +19,16 @@ pub struct Extractdb<V>
     accessible_index: AtomicUsize,
 }
 
-impl<V> Extractdb<V>
+impl<V> ExtractDb<V>
     where
         V: Eq + Hash + Clone
 {
-    pub fn new() -> Extractdb<V> {
+    pub fn new() -> ExtractDb<V> {
         let shards: Vec<RwLock<HashSet<V>>> = (0..SHARD_COUNT)
             .map(|_| RwLock::new(HashSet::new()))
             .collect();
 
-        Extractdb {
+        ExtractDb {
             data_store_shards: shards,
             data_hasher: RandomState::new(),
             accessible_store: RwLock::new(Vec::new()),
@@ -117,28 +117,28 @@ impl<V> Extractdb<V>
 mod tests {
     use super::*;
 
-    /// Attempts to insert a single value map into the Extractdb<i32>
+    /// Attempts to insert a single value map into the ExtractDb<i32>
     ///
     /// # Returns
     ///
-    /// This test should always return 1 -> Extractdb::internal_count()
+    /// This test should always return 1 -> ExtractDb::internal_count()
     #[test]
     fn push() {
-        let db: Extractdb<i32> = Extractdb::new();
+        let db: ExtractDb<i32> = ExtractDb::new();
 
         db.push(100);
 
         assert_eq!(db.internal_count(), 1);
     }
 
-    /// Inserts multiple unique non-overlapping values into Extractdb<i32>
+    /// Inserts multiple unique non-overlapping values into ExtractDb<i32>
     ///
     /// # Returns
     ///
-    /// This test should always return 128 -> Extractdb::internal_count()
+    /// This test should always return 128 -> ExtractDb::internal_count()
     #[test]
     fn push_multiple() {
-        let db: Extractdb<i32> = Extractdb::new();
+        let db: ExtractDb<i32> = ExtractDb::new();
 
         for count in 0..128 {
             db.push(count);
@@ -147,15 +147,15 @@ mod tests {
         assert_eq!(db.internal_count(), 128);
     }
 
-    /// Inserts unique collided value twice into Extractdb<i32>
+    /// Inserts unique collided value twice into ExtractDb<i32>
     /// Test whether double unique insertion occurs
     ///
     /// # Returns
     ///
-    /// This test should always return 1 -> Extractdb::internal_count()
+    /// This test should always return 1 -> ExtractDb::internal_count()
     #[test]
     fn push_collided() {
-        let db: Extractdb<i32> = Extractdb::new();
+        let db: ExtractDb<i32> = ExtractDb::new();
 
         db.push(10);
         db.push(10);
@@ -163,14 +163,14 @@ mod tests {
         assert_eq!(db.internal_count(), 1);
     }
 
-    /// Inserts unique values in a multithreaded environment into a Extractdb<i32>
+    /// Inserts unique values in a multithreaded environment into a ExtractDb<i32>
     ///
     /// # Returns
     ///
-    /// This test should always return (thread_count * insertion_count) -> Extractdb::internal_count()
+    /// This test should always return (thread_count * insertion_count) -> ExtractDb::internal_count()
     #[test]
     fn push_multi_thread() {
-        let database: Arc<Extractdb<String>> = Arc::new(Extractdb::new());
+        let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new());
         let thread_count = 4;
         let insertion_count = 128;
 
@@ -192,15 +192,15 @@ mod tests {
     }
 
 
-    /// Get count of empty accessible store in a Extractdb<i32>
+    /// Get count of empty accessible store in a ExtractDb<i32>
     /// The reason this returns an empty count even after insertion is a fetch_next did not occur.
     ///
     /// # Returns
     ///
-    /// This test should always return 0 -> Extractdb::count()
+    /// This test should always return 0 -> ExtractDb::count()
     #[test]
     fn count_empty_store() {
-        let db: Extractdb<i32> = Extractdb::new();
+        let db: ExtractDb<i32> = ExtractDb::new();
 
         db.push(0);
         db.push(10);
@@ -210,15 +210,15 @@ mod tests {
         assert_eq!(db.count().unwrap(), 0);
     }
 
-    /// Get count of loaded accessible store in a Extractdb<i32>
+    /// Get count of loaded accessible store in a ExtractDb<i32>
     /// The reason this returns a non-zero count is a fetch_next has occurred.
     ///
     /// # Returns
     ///
-    /// This test should always return 4 -> Extractdb::count()
+    /// This test should always return 4 -> ExtractDb::count()
     #[test]
     fn count_loaded_store() {
-        let db: Extractdb<i32> = Extractdb::new();
+        let db: ExtractDb<i32> = ExtractDb::new();
 
         db.push(0);
         db.push(10);
@@ -230,14 +230,14 @@ mod tests {
         assert_eq!(db.count().unwrap(), 4);
     }
 
-    /// Fetches data from a non-empty Extractdb<i32>
+    /// Fetches data from a non-empty ExtractDb<i32>
     ///
     /// # Returns
     ///
-    /// This test should always return True -> Extractdb::fetch_next().is_ok()
+    /// This test should always return True -> ExtractDb::fetch_next().is_ok()
     #[test]
     fn fetch_data() {
-        let db: Extractdb<i32> = Extractdb::new();
+        let db: ExtractDb<i32> = ExtractDb::new();
 
         db.push(0);
         db.push(1000);
@@ -245,14 +245,14 @@ mod tests {
         assert!(db.fetch_next().is_ok());
     }
 
-    /// Fetches multiple pieces of data from a non-empty Extractdb<i32>
+    /// Fetches multiple pieces of data from a non-empty ExtractDb<i32>
     ///
     /// # Returns
     ///
-    /// This test should always return True -> Extractdb::fetch_next().is_ok()
+    /// This test should always return True -> ExtractDb::fetch_next().is_ok()
     #[test]
     fn fetch_data_multiple() {
-        let database: Extractdb<i64> = Extractdb::new();
+        let database: ExtractDb<i64> = ExtractDb::new();
 
         for i in 0..128 {
             database.push(i);
@@ -263,14 +263,14 @@ mod tests {
         }
     }
 
-    /// Fetches data from a empty Extractdb<i32>
+    /// Fetches data from a empty ExtractDb<i32>
     ///
     /// # Returns
     ///
-    /// This test should always return True -> Extractdb::fetch_next().is_err()
+    /// This test should always return True -> ExtractDb::fetch_next().is_err()
     #[test]
     fn fetch_data_empty() {
-        let database: Extractdb<i64> = Extractdb::new();
+        let database: ExtractDb<i64> = ExtractDb::new();
 
         assert!(database.fetch_next().is_err());
     }
