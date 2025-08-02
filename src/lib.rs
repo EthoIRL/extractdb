@@ -77,7 +77,7 @@ impl<V> Extractdb<V>
             .map_err(|err| format!("Failed to retrieve internal count of data_store ({})", err).into())
     }
 
-    pub fn internal_count(&self) -> Result<usize, Box<dyn Error + Send + Sync>> {
+    pub fn internal_count(&self) -> usize {
         let mut global_shard_size = 0;
         for data_store_shard in self.data_store_shards.deref() {
             if let Ok(data_shard) = data_store_shard.read() {
@@ -85,7 +85,7 @@ impl<V> Extractdb<V>
             }
         }
 
-        return Ok(global_shard_size);
+        global_shard_size
     }
 
     fn load_shards_to_accessible(&self) -> Result<(), Box<dyn Error + '_>>  {
