@@ -35,6 +35,22 @@ impl<V> ExtractDb<V>
         }
     }
 
+    /// Pushes data into the internal sharded hashset.
+    ///
+    /// # Returns
+    /// ``True`` if data has successfully inserted into a hashset
+    /// ``False`` if data has already been added to a hashset, or if the internal shard is poisoned
+    ///
+    /// # Examples
+    /// ```rust
+    /// use extractdb::ExtractDb;
+    ///
+    /// let db: ExtractDb<i32> = ExtractDb::new();
+    ///
+    /// assert_eq!(db.push(100), true);
+    /// assert_eq!(db.push(100), false);
+    /// assert_eq!(db.internal_count(), 1);
+    /// ```
     pub fn push(&self, value: V) -> bool {
         let shard_index = self.data_hasher.hash_one(&value) as usize % SHARD_COUNT;
 
@@ -45,6 +61,23 @@ impl<V> ExtractDb<V>
         false
     }
 
+    /// Fetches the next item in a internal non-mutable vector
+    /// This is not a FIFO/FILO function and is unordered with no guarantees.
+    ///
+    /// # Returns
+    /// ``V`` A cloned copy of the internal item
+    ///
+    /// # Examples
+    /// ```rust
+    /// use extractdb::ExtractDb;
+    ///
+    /// let db: ExtractDb<&str> = ExtractDb::new();
+    ///
+    /// assert_eq!(db.push("hello world"), true);
+    /// assert_eq!(db.fetch_next().unwrap(), "hello world");
+    /// assert_eq!(db.internal_count(), 1);
+    /// assert_eq!(db.count().unwrap(), 1);
+    /// ```
     pub fn fetch_next(&self) -> Result<V, Box<dyn Error + '_>> {
         let accessible_index = self.accessible_index.fetch_add(1, Ordering::AcqRel);
         let accessible_store_len = self.count()?;
@@ -69,6 +102,22 @@ impl<V> ExtractDb<V>
         Err("Failed to access data from accessible_store".into())
     }
 
+    /// Get the current count of the fetch_next non-mutable vector
+    ///
+    /// # Returns
+    /// ``usize`` a total of all items loaded into the temporary fetch vector
+    ///
+    /// # Examples
+    /// ```rust
+    /// use extractdb::ExtractDb;
+    ///
+    /// let db: ExtractDb<u8> = ExtractDb::new();
+    ///
+    /// assert_eq!(db.push(20), true);
+    /// assert_ne!(db.count().unwrap(), 1); // No data is currently loaded
+    /// assert_eq!(db.fetch_next().unwrap(), 20); // Causes a load for the non-mutable vector
+    /// assert_eq!(db.count().unwrap(), 1);
+    /// ```
     pub fn count(&self) -> Result<usize, Box<dyn Error>> {
         self.accessible_store
             .read()
@@ -76,6 +125,23 @@ impl<V> ExtractDb<V>
             .map_err(|err| format!("Failed to retrieve internal count of data_store ({})", err).into())
     }
 
+    /// Get the internal count of items in all shards. This represents the total amount of items in the database at any time.
+    /// This function is impacted by writes and may be slowed.
+    ///
+    /// # Returns
+    /// ``usize`` a total of all items in the entire sharded database.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use extractdb::ExtractDb;
+    ///
+    /// let db: ExtractDb<u8> = ExtractDb::new();
+    ///
+    /// for i in 0..128 {
+    ///     assert_eq!(db.push(i), true);
+    /// }
+    /// assert_eq!(db.internal_count(), 128);
+    /// ```
     pub fn internal_count(&self) -> usize {
         let mut global_shard_size = 0;
         for data_store_shard in self.data_store_shards.deref() {
