@@ -1,84 +1,46 @@
 use std::collections::HashSet;
 use std::error::Error;
-use std::hash::Hash;
+use std::hash::{BuildHasher, Hash, RandomState};
 use std::ops::Deref;
-use std::ptr::eq;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
-use crossbeam_utils::CachePadded;
-
 const SHARD_COUNT: usize = 16;
 
-pub struct Extractdb<V: Send + Sync + Eq + Hash + 'static> {
-    data_store_shards: Vec<CachePadded<RwLock<HashSet<V>>>>,
+pub struct Extractdb<V>
+    where
+        V: Send + Sync + Eq + Hash
+{
+    data_store_shards: Vec<RwLock<HashSet<V>>>,
+    data_hasher: RandomState,
 
     accessible_store: RwLock<Vec<V>>,
-    accessible_index: CachePadded<AtomicUsize>,
+    accessible_index: AtomicUsize,
 }
 
 impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
-    pub fn new<K: Send + Sync + Eq + Hash + Clone + 'static>() -> Extractdb<V> {
-        let shards = (0..SHARD_COUNT)
-            .map(|_| CachePadded::new(RwLock::new(HashSet::new())))
+    pub fn new() -> Extractdb<V> {
+        let shards: Vec<RwLock<HashSet<V>>> = (0..SHARD_COUNT)
+            .map(|_| RwLock::new(HashSet::new()))
             .collect();
 
         Extractdb {
             data_store_shards: shards,
+            data_hasher: RandomState::new(),
             accessible_store: RwLock::new(Vec::new()),
-            accessible_index: CachePadded::new(AtomicUsize::new(0))
+            accessible_index: AtomicUsize::new(0)
         }
     }
 
-    pub fn push(&self, item: V) -> Result<(), Box<dyn Error>> {
-        let shard_index = fastrand::usize(0usize..SHARD_COUNT);
+    pub fn push(&self, value: V) -> bool {
+        let shard_index = self.data_hasher.hash_one(&value) as usize % SHARD_COUNT;
 
-        if let Some(data_store_shard) = self.data_store_shards.get(shard_index) {
-            if let Ok(mut data_store) = data_store_shard.try_write() {
-                return match data_store.insert(item) {
-                    true => Ok(()),
-                    false => Err("Failed to insert item into data_store".into())
-                }
-            }
+        if let Ok(mut data_shard) = self.data_store_shards[shard_index].write() {
+            return data_shard.insert(value);
         }
 
-        self.push(item)
-    }
-
-    pub fn remove(&self, item: &V) {
-        let mut item_with_shard: Option<&CachePadded<RwLock<HashSet<V>>>> = None;
-
-        for data_store_shard in &self.data_store_shards {
-            if let Ok(data_shard_reader) = data_store_shard.try_read() {
-                if data_shard_reader.is_empty() {
-                    continue
-                }
-
-                if data_shard_reader.contains(item) {
-                    item_with_shard = Some(data_store_shard);
-                    break
-                }
-            }
-        }
-
-        if let Some(shard) = item_with_shard {
-            if let Ok(mut shard_writer) = shard.write() {
-                shard_writer.remove(item);
-            }
-
-            let mut item_in_accessible: Option<usize> = None;
-
-            if let Ok(accessible_store_reader) = self.accessible_store.read() {
-                item_in_accessible = accessible_store_reader.iter().position(|x| eq(x, item));
-            }
-
-            if let Some(position) = item_in_accessible {
-                if let Ok(mut accessible_store_writer) = self.accessible_store.write() {
-                    accessible_store_writer.remove(position);
-                }
-            }
-        }
+        false
     }
 
     pub fn fetch_next(&self) -> Result<V, Box<dyn Error + '_>> {
@@ -114,9 +76,9 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
 
     pub fn internal_count(&self) -> Result<usize, Box<dyn Error + Send + Sync>> {
         let mut global_shard_size = 0;
-        for data_store_shard in &self.data_store_shards {
-            if let Ok(locked_store) = data_store_shard.read() {
-                global_shard_size += locked_store.len()
+        for data_store_shard in self.data_store_shards.deref() {
+            if let Ok(data_shard) = data_store_shard.read() {
+                global_shard_size += data_shard.len()
             }
         }
 
@@ -127,8 +89,8 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
         if let Ok(mut accessible_store) = self.accessible_store.write() {
             let mut items_to_add: Vec<V> = Vec::new();
 
-            for data_store_shard in &self.data_store_shards {
-                let data_store_reader = data_store_shard.read()?;
+            for data_store_shard in self.data_store_shards.deref() {
+                let data_store_reader = data_store_shard.read().unwrap();
 
                 for data_store_item in data_store_reader.iter() {
                     if !accessible_store.contains(&data_store_item) {
@@ -150,16 +112,14 @@ impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-    use dashmap::DashSet;
     use super::*;
 
     #[test]
     fn push_data_success() {
-        let mut database: Extractdb<String> = Extractdb::new::<String>();
+        let mut database: Extractdb<String> = Extractdb::new();
 
         for x in 0..125000 {
-            database.push(String::from(format!("{:?}", x))).unwrap();
+            database.push(String::from(format!("{:?}", x)));
         }
 
         assert_ne!(database.internal_count().unwrap(), 0);
@@ -167,23 +127,23 @@ mod tests {
 
     #[test]
     fn fetch_data_success() {
-        let mut database: Extractdb<i64> = Extractdb::new::<i64>();
+        let mut database: Extractdb<i64> = Extractdb::new();
 
-        database.push(01010202030304040505).unwrap();
+        database.push(01010202030304040505);
 
         assert_eq!(database.fetch_next().unwrap(), 01010202030304040505);
     }
 
     #[test]
     fn push_multi_thread_success() {
-        let database: Arc<Extractdb<String>> = Arc::new(Extractdb::new::<String>());
+        let database: Arc<Extractdb<String>> = Arc::new(Extractdb::new());
 
         let mut threads = Vec::new();
         for thread_id in 0..4 {
             let reference_database = Arc::clone(&database);
             threads.push(thread::spawn(move || {
                 for count in 0..12500 {
-                    reference_database.push(format!("{}-{}", thread_id, count)).unwrap();
+                    reference_database.push(format!("{}-{}", thread_id, count));
                 }
             }));
         }
@@ -193,44 +153,5 @@ mod tests {
         }
 
         assert_eq!(database.internal_count().unwrap(), 50000);
-    }
-
-    #[test]
-    fn benchmark() {
-        let dashmap: Arc<DashSet<String>> = Arc::new(DashSet::new());
-
-        let mut threads = Vec::new();
-        let start = Instant::now();
-        for thread_id in 0..48 {
-            let reference_database = Arc::clone(&dashmap);
-            threads.push(thread::spawn(move || {
-                for count in 0..1250000 {
-                    reference_database.insert(format!("{}-{}", thread_id, count));
-                }
-            }));
-        }
-
-        for thread in threads {
-            thread.join().expect("Thread panicked during push");
-        }
-        println!("DashSet: {:?} {}", start.elapsed(), dashmap.shards().len());
-
-        let database: Arc<Extractdb<String>> = Arc::new(Extractdb::new::<String>());
-        let mut threads = Vec::new();
-        let start = Instant::now();
-        for thread_id in 0..48 {
-            let reference_database = Arc::clone(&database);
-            threads.push(thread::spawn(move || {
-                for count in 0..1250000 {
-                    reference_database.push(format!("{}-{}", thread_id, count)).unwrap();
-                }
-            }));
-        }
-
-        for thread in threads {
-            thread.join().expect("Thread panicked during push");
-        }
-
-        println!("ExtractDB: {:?}", start.elapsed())
     }
 }
