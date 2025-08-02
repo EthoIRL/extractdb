@@ -157,12 +157,12 @@ impl<V> ExtractDb<V>
         if let Ok(mut accessible_store) = self.accessible_store.write() {
             let mut items_to_add: Vec<V> = Vec::new();
 
-            for data_store_shard in self.data_store_shards.deref() {
-                let data_store_reader = data_store_shard.read().unwrap();
-
-                for data_store_item in data_store_reader.iter() {
-                    if !accessible_store.contains(&data_store_item) {
-                        items_to_add.push(data_store_item.clone())
+            for data_store_shard in &self.data_store_shards {
+                if let Ok(data_store) = data_store_shard.read() {
+                    for data_store_item in data_store.iter() {
+                        if !accessible_store.contains(&data_store_item) {
+                            items_to_add.push(data_store_item.clone());
+                        }
                     }
                 }
             }
