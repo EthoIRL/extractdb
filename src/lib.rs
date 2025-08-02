@@ -79,11 +79,11 @@ impl<V> ExtractDb<V>
     /// assert_eq!(db.push("hello world"), true);
     /// assert_eq!(db.fetch_next().unwrap(), "hello world");
     /// assert_eq!(db.internal_count(), 1);
-    /// assert_eq!(db.count().unwrap(), 1);
+    /// assert_eq!(db.fetch_count().unwrap(), 1);
     /// ```
     pub fn fetch_next(&self) -> Result<V, Box<dyn Error + '_>> {
         let accessible_index = self.accessible_index.fetch_add(1, Ordering::AcqRel);
-        let accessible_store_len = self.count()?;
+        let accessible_store_len = self.fetch_count()?;
 
         // TODO: While this is a basic "algorithm" it could be improved...
         // The current implementation works by loading more data into the store whenever the index reaches the current length.
@@ -117,11 +117,11 @@ impl<V> ExtractDb<V>
     /// let db: ExtractDb<u8> = ExtractDb::new();
     ///
     /// assert_eq!(db.push(20), true);
-    /// assert_ne!(db.count().unwrap(), 1); // No data is currently loaded
+    /// assert_ne!(db.fetch_count().unwrap(), 1); // No data is currently loaded
     /// assert_eq!(db.fetch_next().unwrap(), 20); // Causes a load for the non-mutable vector
-    /// assert_eq!(db.count().unwrap(), 1);
+    /// assert_eq!(db.fetch_count().unwrap(), 1);
     /// ```
-    pub fn count(&self) -> Result<usize, Box<dyn Error>> {
+    pub fn fetch_count(&self) -> Result<usize, Box<dyn Error>> {
         self.accessible_store
             .read()
             .map(|reader| reader.len())
@@ -278,7 +278,7 @@ mod tests {
         db.push(100);
         db.push(1000);
 
-        assert_eq!(db.count().unwrap(), 0);
+        assert_eq!(db.fetch_count().unwrap(), 0);
     }
 
     /// Get count of loaded accessible store in a ExtractDb<i32>
@@ -298,7 +298,7 @@ mod tests {
 
         db.fetch_next().unwrap();
 
-        assert_eq!(db.count().unwrap(), 4);
+        assert_eq!(db.fetch_count().unwrap(), 4);
     }
 
     /// Fetches data from a non-empty ExtractDb<i32>
