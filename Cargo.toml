@@ -2,6 +2,15 @@
 name = "extractdb"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3"
+authors = ["EthoIRL"]
+repository = "https://github.com/EthoIRL/extractdb"
+homepage = "https://github.com/EthoIRL/extractdb"
+documentation = "https://docs.rs/extractdb"
+readme = "README.md"
+description = "Concurrent value-pull hash database"
+keywords = ["concurrent", "hashset", "database"]
+categories = ["database", "concurrency", "data-structures"]
 
-[dependencies][dependencies]
+[dependencies]
 hashbrown = "0.15.4"
