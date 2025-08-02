@@ -10,7 +10,7 @@ const SHARD_COUNT: usize = 16;
 
 pub struct Extractdb<V>
     where
-        V: Send + Sync + Eq + Hash
+        V: Eq + Hash + Clone
 {
     data_store_shards: Vec<RwLock<HashSet<V>>>,
     data_hasher: RandomState,
@@ -19,7 +19,10 @@ pub struct Extractdb<V>
     accessible_index: AtomicUsize,
 }
 
-impl<V: Send + Sync + Eq + Hash + Clone + 'static> Extractdb<V> {
+impl<V> Extractdb<V>
+    where
+        V: Eq + Hash + Clone
+{
     pub fn new() -> Extractdb<V> {
         let shards: Vec<RwLock<HashSet<V>>> = (0..SHARD_COUNT)
             .map(|_| RwLock::new(HashSet::new()))
