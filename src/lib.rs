@@ -2,9 +2,8 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::hash::{BuildHasher, Hash, RandomState};
 use std::ops::Deref;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::thread;
 
 const SHARD_COUNT: usize = 16;
 
@@ -115,6 +114,8 @@ impl<V> ExtractDb<V>
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::thread;
     use super::*;
 
     /// Attempts to insert a single value map into the ExtractDb<i32>
