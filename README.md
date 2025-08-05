@@ -1,7 +1,7 @@
 # Extract DB
 [![Crates.io](https://img.shields.io/crates/v/extractdb?style=flat-square)](https://crates.io/crates/extractdb) [![docs.rs](https://img.shields.io/docsrs/extractdb?style=flat-square)](https://docs.rs/extractdb/)
 
-A thread-safe, in-memory value store supporting concurrent reads and writes.<br/>
+A thread-safe, in-memory value store supporting concurrent fetches and writes.<br/>
 
 This is not a traditional kv-store, in the sense that it doesn't use any form of keys.<br/>
 Specific "item" removal is not supported in favor of a fetching type system and can be thought of as a read-only dequeue database.
@@ -12,12 +12,25 @@ Specific "item" removal is not supported in favor of a fetching type system and 
 - Fetching & pushing are fully thread-safe functions
 - Once inserted never removed (**Read-only**)
 
+# Trade-offs.
+- No item removal
+- Non-deterministic fetch order 
+- Write throughput is prioritized over reading performance
+
 # Use scenarios:
+- Concurrent queue with unique items only (HashSet + VecDequeue)-like
 - Fast concurrent insertions are needed over concurrent reads
 - Fast reading on a single-thread with multiple concurrent writers
 - Persistent in-memory hash-store
 
 This was originally built for a web-scraper which needs to write lots of links with fewer reads.
+
+# Installation
+```toml
+# Cargo.toml
+[dependencies]
+extractdb = "0.1.0"
+```
 
 # Example
 - Simple push, fetch, & count example:
