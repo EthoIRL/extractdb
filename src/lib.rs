@@ -1,5 +1,6 @@
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
+use std::collections::VecDeque;
 use std::error::Error;
 use std::hash::{BuildHasher, Hash, RandomState};
 use std::sync::RwLock;
@@ -23,7 +24,7 @@ pub struct ExtractDb<V>
     data_store_shards: Vec<RwLock<HashSet<&'static V>>>,
     data_hasher: RandomState,
 
-    insertion_queue: ConcurrentQueue<&'static V>,
+    insertion_queue: Vec<RwLock<VecDeque<&'static V>>>,
     removal_store: ConcurrentQueue<&'static V>,
 }
 
@@ -69,11 +70,15 @@ impl<V> ExtractDb<V>
             .map(|_| RwLock::new(HashSet::new()))
             .collect();
 
+        let queues: Vec<RwLock<VecDeque<&'static V>>> = (0..shard_count)
+            .map(|_| RwLock::new(VecDeque::new()))
+            .collect();
+
         ExtractDb {
             shard_count,
             data_store_shards: shards,
             data_hasher: RandomState::new(),
-            insertion_queue: ConcurrentQueue::unbounded(),
+            insertion_queue: queues,
             removal_store: ConcurrentQueue::unbounded()
         }
     }
@@ -101,12 +106,12 @@ impl<V> ExtractDb<V>
         let data: &'static V = Box::leak(Box::new(value));
 
         if let Ok(mut data_shard) = self.data_store_shards[shard_index as usize].write() {
-            return match data_shard.insert(data) {
-                true => {
-                    self.insertion_queue.push(data).is_ok()
+            if data_shard.insert(data) {
+                if let Ok(mut queue) = self.insertion_queue[shard_index as usize].write() {
+                    queue.push_back(data);
+                    return true;
                 }
-                false => false
-            };
+            }
         }
 
         false
@@ -194,10 +199,16 @@ impl<V> ExtractDb<V>
     }
 
     fn load_shards_to_accessible(&self) -> Result<(), Box<dyn Error + '_>>  {
-        for _ in 0..self.insertion_queue.len() {
-            if let Ok(item) = self.insertion_queue.pop() {
-                if self.removal_store.push(item).is_err() {
-                    return Err("Failed to load sharded data into removal_store queue".into());
+        for locked_queue in &self.insertion_queue {
+            if let Ok(mut write_queue) = locked_queue.write() {
+                if write_queue.is_empty() {
+                    continue;
+                }
+
+                while let Some(item) = write_queue.pop_front() {
+                    if self.removal_store.push(item).is_err() {
+                        return Err("Failed to load sharded data into removal_store queue".into());
+                    }
                 }
             }
         }
