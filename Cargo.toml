@@ -14,3 +14,4 @@ categories = ["database", "concurrency", "data-structures"]
 
 [dependencies]
 hashbrown = "0.15.4"
+concurrent-queue = "2.5.0"
