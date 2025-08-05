@@ -10,6 +10,12 @@ use hashbrown::HashSet;
 
 const SHARD_COUNT: usize = 16;
 
+/// ExtractDb is a concurrent hash-store.
+///
+/// ExtractDb only supplies a push & fetch interface where both are ``&self``.
+/// Once data is inserted it can never be removed. Persistence guaranteed.
+///
+/// You can think of it as a non-mutable concurrent VecDequeue with unique values only.
 pub struct ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static
@@ -25,6 +31,16 @@ impl<V> ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static
 {
+    /// Creates a new ExtractDb
+    ///
+    /// # Examples
+    /// ```rust
+    /// use extractdb::ExtractDb;
+    ///
+    /// let db: ExtractDb<&str> = ExtractDb::new();
+    ///
+    /// assert_eq!(db.push("Hello ExtractDb!"), true);
+    /// ```
     pub fn new() -> ExtractDb<V> {
         let shards: Vec<RwLock<HashSet<&'static V>>> = (0..SHARD_COUNT)
             .map(|_| RwLock::new(HashSet::new()))
