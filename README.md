@@ -10,6 +10,13 @@ Specific "item" removal is not supported in favor of a fetching type system and 
 - Fetching & pushing are fully thread-safe functions
 - Once inserted never removed (**Read-only**)
 
+# Use scenarios:
+- Fast concurrent insertions are needed over concurrent reads
+- Fast reading on a single-thread with multiple concurrent writers
+- Persistent in-memory hash-store
+
+This was originally built for a web-scraper which needs to write lots of links with fewer reads.
+
 # Example
 Simple push, fetch, & count example
 ```rust
