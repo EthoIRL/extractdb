@@ -1,39 +1,40 @@
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
-use hashbrown::HashSet;
 use std::error::Error;
 use std::hash::{BuildHasher, Hash, RandomState};
 use std::ops::Deref;
 use std::sync::RwLock;
-use std::sync::atomic::{AtomicUsize, Ordering};
+
+use concurrent_queue::ConcurrentQueue;
+use hashbrown::HashSet;
 
 const SHARD_COUNT: usize = 16;
 
 pub struct ExtractDb<V>
     where
-        V: Eq + Hash + Clone
+        V: Eq + Hash + Clone + 'static
 {
-    data_store_shards: Vec<RwLock<HashSet<V>>>,
+    data_store_shards: Vec<RwLock<HashSet<&'static V>>>,
     data_hasher: RandomState,
 
-    accessible_store: RwLock<Vec<V>>,
-    accessible_index: AtomicUsize,
+    insertion_queue: ConcurrentQueue<&'static V>,
+    removal_store: ConcurrentQueue<&'static V>,
 }
 
 impl<V> ExtractDb<V>
     where
-        V: Eq + Hash + Clone
+        V: Eq + Hash + Clone + 'static
 {
     pub fn new() -> ExtractDb<V> {
-        let shards: Vec<RwLock<HashSet<V>>> = (0..SHARD_COUNT)
+        let shards: Vec<RwLock<HashSet<&'static V>>> = (0..SHARD_COUNT)
             .map(|_| RwLock::new(HashSet::new()))
             .collect();
 
         ExtractDb {
             data_store_shards: shards,
             data_hasher: RandomState::new(),
-            accessible_store: RwLock::new(Vec::new()),
-            accessible_index: AtomicUsize::new(0)
+            insertion_queue: ConcurrentQueue::unbounded(),
+            removal_store: ConcurrentQueue::unbounded()
         }
     }
 
@@ -54,18 +55,26 @@ impl<V> ExtractDb<V>
     /// assert_eq!(db.internal_count(), 1);
     /// ```
     pub fn push(&self, value: V) -> bool {
-        let shard_index = self.data_hasher.hash_one(&value) as usize % SHARD_COUNT;
+        let hash = self.data_hasher.hash_one(&value);
+        let shard_index = hash as usize % SHARD_COUNT;
+
+        let data: &'static V = Box::leak(Box::new(value));
 
         if let Ok(mut data_shard) = self.data_store_shards[shard_index].write() {
-            return data_shard.insert(value);
+            return match data_shard.insert(data) {
+                true => {
+                    self.insertion_queue.push(data).is_ok()
+                }
+                false => false
+            };
         }
 
         false
     }
 
-    /// Fetches the next item in a internal non-mutable vector.
+    /// Fetches a unique item from an internal queue
     ///
-    /// This is not a FIFO/FILO function and is unordered with no guarantees.
+    /// This function may act as a FIFO during low contention scenarios. Order is not guaranteed.
     ///
     /// # Returns
     /// ``V`` A cloned copy of the internal item
@@ -77,35 +86,22 @@ impl<V> ExtractDb<V>
     /// let db: ExtractDb<&str> = ExtractDb::new();
     ///
     /// assert_eq!(db.push("hello world"), true);
-    /// assert_eq!(db.fetch_next().unwrap(), "hello world");
+    /// assert_eq!(db.fetch_next().unwrap(), &"hello world");
     /// assert_eq!(db.internal_count(), 1);
-    /// assert_eq!(db.fetch_count().unwrap(), 1);
+    /// assert_eq!(db.fetch_count(), 0);
     /// ```
-    pub fn fetch_next(&self) -> Result<V, Box<dyn Error + '_>> {
-        let accessible_index = self.accessible_index.fetch_add(1, Ordering::AcqRel);
-        let accessible_store_len = self.fetch_count()?;
-
-        // TODO: While this is a basic "algorithm" it could be improved...
-        // The current implementation works by loading more data into the store whenever the index reaches the current length.
-        // The problem with this only occurs later on in large sets when the accessible_store index is small and the data_store is large.
-        // After reaching the end it loads a massive amount of memory (e.g. the entire data_store) causing deadlocks and slowdowns.
-        if accessible_index >= accessible_store_len {
+    pub fn fetch_next(&self) -> Result<&V, Box<dyn Error + '_>> {
+        if self.removal_store.len() <= 0 {
             self.load_shards_to_accessible()?;
         }
 
-        if let Ok(accessible_store_reader) = self.accessible_store.read() {
-            let value = accessible_store_reader.get(accessible_index);
-
-            return match value {
-                Some(value) => Ok(value.clone()),
-                None => Err("No new data could be retrieved from accessible_store".into())
-            }
+        return match self.removal_store.pop() {
+            Ok(value) => Ok(value),
+            Err(_) => Err("Failed to access data from accessible_store".into())
         }
-
-        Err("Failed to access data from accessible_store".into())
     }
 
-    /// Get the current count of the fetch_next non-mutable vector
+    /// Get the current count of the fetch_next mutable queue
     ///
     /// # Returns
     /// ``usize`` a total of all items loaded into the temporary fetch vector
@@ -117,15 +113,12 @@ impl<V> ExtractDb<V>
     /// let db: ExtractDb<u8> = ExtractDb::new();
     ///
     /// assert_eq!(db.push(20), true);
-    /// assert_ne!(db.fetch_count().unwrap(), 1); // No data is currently loaded
-    /// assert_eq!(db.fetch_next().unwrap(), 20); // Causes a load for the non-mutable vector
-    /// assert_eq!(db.fetch_count().unwrap(), 1);
+    /// assert_ne!(db.fetch_count(), 1); // No data is currently loaded
+    /// assert_eq!(db.fetch_next().unwrap(), &20); // Causes a load for the non-mutable vector
+    /// assert_eq!(db.fetch_count(), 0);
     /// ```
-    pub fn fetch_count(&self) -> Result<usize, Box<dyn Error>> {
-        self.accessible_store
-            .read()
-            .map(|reader| reader.len())
-            .map_err(|err| format!("Failed to retrieve internal count of data_store ({})", err).into())
+    pub fn fetch_count(&self) -> usize {
+        self.removal_store.len()
     }
 
     /// Get the internal count of items in all shards. This represents the total amount of items in the database at any time.
@@ -158,27 +151,15 @@ impl<V> ExtractDb<V>
     }
 
     fn load_shards_to_accessible(&self) -> Result<(), Box<dyn Error + '_>>  {
-        if let Ok(mut accessible_store) = self.accessible_store.write() {
-            let mut items_to_add: Vec<V> = Vec::new();
-
-            for data_store_shard in &self.data_store_shards {
-                if let Ok(data_store) = data_store_shard.read() {
-                    for data_store_item in data_store.iter() {
-                        if !accessible_store.contains(&data_store_item) {
-                            items_to_add.push(data_store_item.clone());
-                        }
-                    }
+        for _ in 0..self.insertion_queue.len() {
+            if let Ok(item) = self.insertion_queue.pop() {
+                if let Err(_) = self.removal_store.push(item) {
+                    return Err("Failed to load sharded data into removal_store queue".into());
                 }
             }
-
-            for item in items_to_add {
-                accessible_store.push(item);
-            }
-
-            return Ok(())
         }
 
-        Err("Failed to load sharded data into accessible_store vector".into())
+        Ok(())
     }
 }
 
@@ -278,7 +259,7 @@ mod tests {
         db.push(100);
         db.push(1000);
 
-        assert_eq!(db.fetch_count().unwrap(), 0);
+        assert_eq!(db.fetch_count(), 0);
     }
 
     /// Get count of loaded accessible store in a ExtractDb<i32>
@@ -298,7 +279,7 @@ mod tests {
 
         db.fetch_next().unwrap();
 
-        assert_eq!(db.fetch_count().unwrap(), 4);
+        assert_eq!(db.fetch_count(), 3);
     }
 
     /// Fetches data from a non-empty ExtractDb<i32>

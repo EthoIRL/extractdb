@@ -23,9 +23,9 @@ pub fn main() {
     let total_items_in_db = database.internal_count();
     let mut items_in_quick_access_memory = 0;
     if total_items_in_db > 0 {
-        let item: i32 = database.fetch_next().unwrap();
+        let item: &i32 = database.fetch_next().unwrap();
 
-        items_in_quick_access_memory = database.fetch_count().unwrap();
+        items_in_quick_access_memory = database.fetch_count();
     }
     
     println!("Total items: {} | Quick Access item count: {}", total_items_in_db, items_in_quick_access_memory);
