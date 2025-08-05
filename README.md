@@ -39,5 +39,32 @@ pub fn main() {
 }
 ```
 
+Simple multithreaded insert & fetch example
+
+```rust
+use std::sync::Arc;
+use extractdb::ExtractDb;
+use std::thread;
+
+pub fn main() {
+    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new());
+
+    for thread_id in 0..8 {
+        let local_database = Arc::clone(&database);
+        thread::spawn(move || {
+            local_database.push(format!("Hello from thread {}", thread_id))
+        });
+    }
+
+    // Will only print some of the items... since we are not waiting for thread completion.
+    for _ in 0..8 {
+        if let Ok(item) = database.fetch_next() {
+            println!("Item: {}", item);
+        }
+    }
+}
+```
+
+
 # License
 This project is licensed under [GPL-3.0](LICENSE)
