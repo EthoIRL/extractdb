@@ -326,4 +326,35 @@ mod tests {
 
         assert!(database.fetch_next().is_err());
     }
-}
+
+    /// Checks if data is fetched and returned twice from a ExtractDb<i32>
+    #[test]
+    fn duplicate_fetch() {
+        let database: ExtractDb<i64> = ExtractDb::new();
+
+        assert_eq!(database.push(-1), true);
+        assert_eq!(database.fetch_count(), 0);
+
+        let initial_value = database.fetch_next().unwrap();
+
+        assert_eq!(initial_value, &-1);
+
+        for i in 0..100 {
+            assert_eq!(database.push(i), true);
+        }
+
+        assert_eq!(database.fetch_count(), 0);
+
+        for i in 0..100 {
+            assert_eq!(database.push(i + 1000), true);
+        }
+
+        for _ in 0..200 {
+            let data = database.fetch_next();
+            assert!(data.is_ok());
+
+            assert_ne!(data.unwrap(), initial_value);
+        }
+
+        assert!(database.fetch_next().is_err());
+    }
