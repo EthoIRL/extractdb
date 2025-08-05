@@ -116,11 +116,11 @@ impl<V> ExtractDb<V>
     /// assert_eq!(db.fetch_count(), 0);
     /// ```
     pub fn fetch_next(&self) -> Result<&V, Box<dyn Error + '_>> {
-        if self.removal_store.len() <= 0 {
+        if self.removal_store.is_empty() {
             self.load_shards_to_accessible()?;
         }
 
-        return match self.removal_store.pop() {
+        match self.removal_store.pop() {
             Ok(value) => Ok(value),
             Err(_) => Err("Failed to access data from accessible_store".into())
         }
@@ -178,7 +178,7 @@ impl<V> ExtractDb<V>
     fn load_shards_to_accessible(&self) -> Result<(), Box<dyn Error + '_>>  {
         for _ in 0..self.insertion_queue.len() {
             if let Ok(item) = self.insertion_queue.pop() {
-                if let Err(_) = self.removal_store.push(item) {
+                if self.removal_store.push(item).is_err() {
                     return Err("Failed to load sharded data into removal_store queue".into());
                 }
             }
