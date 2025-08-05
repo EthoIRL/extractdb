@@ -18,7 +18,7 @@ Specific "item" removal is not supported in favor of a fetching type system and 
 This was originally built for a web-scraper which needs to write lots of links with fewer reads.
 
 # Example
-Simple push, fetch, & count example
+- Simple push, fetch, & count example:
 ```rust
 use extractdb::ExtractDb;
 
@@ -39,8 +39,7 @@ pub fn main() {
 }
 ```
 
-Simple multithreaded insert & fetch example
-
+- Simple multithreaded insert & fetch example:
 ```rust
 use std::sync::Arc;
 use extractdb::ExtractDb;
@@ -65,6 +64,14 @@ pub fn main() {
 }
 ```
 
+# Testing
+This project includes some basic tests to maintain functionality please use them.
+```
+cargo test
+```
+
+# Contributing
+Pull request and issue contributions are very welcome. Please feel free to suggest changes in PRs/Issues :)
 
 # License
 This project is licensed under [GPL-3.0](LICENSE)
