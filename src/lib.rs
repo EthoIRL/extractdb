@@ -19,6 +19,7 @@ pub struct ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static
 {
+    shard_count: usize,
     data_store_shards: Vec<RwLock<HashSet<&'static V>>>,
     data_hasher: RandomState,
 
@@ -50,11 +51,26 @@ impl<V> ExtractDb<V>
     /// assert_eq!(db.push("Hello ExtractDb!"), true);
     /// ```
     pub fn new() -> ExtractDb<V> {
-        let shards: Vec<RwLock<HashSet<&'static V>>> = (0..SHARD_COUNT)
+        Self::new_with_shards(SHARD_COUNT)
+    }
+
+    /// Creates a new `ExtractDb` with a specific internal sharding amount
+    ///
+    /// # Examples
+    /// ```rust
+    /// use extractdb::ExtractDb;
+    ///
+    /// let db: ExtractDb<&str> = ExtractDb::new_with_shards(32);
+    ///
+    /// assert_eq!(db.push("Hello ExtractDb with custom shards!"), true);
+    /// ```
+    pub fn new_with_shards(shard_count: usize) -> ExtractDb<V> {
+        let shards: Vec<RwLock<HashSet<&'static V>>> = (0..shard_count)
             .map(|_| RwLock::new(HashSet::new()))
             .collect();
 
         ExtractDb {
+            shard_count,
             data_store_shards: shards,
             data_hasher: RandomState::new(),
             insertion_queue: ConcurrentQueue::unbounded(),
@@ -80,7 +96,7 @@ impl<V> ExtractDb<V>
     /// ```
     pub fn push(&self, value: V) -> bool {
         let hash = self.data_hasher.hash_one(&value);
-        let shard_index = hash % SHARD_COUNT as u64;
+        let shard_index = hash % self.shard_count as u64;
 
         let data: &'static V = Box::leak(Box::new(value));
 
