@@ -2,7 +2,6 @@
 #![doc = include_str!("../README.md")]
 use std::error::Error;
 use std::hash::{BuildHasher, Hash, RandomState};
-use std::ops::Deref;
 use std::sync::RwLock;
 
 use concurrent_queue::ConcurrentQueue;
@@ -10,12 +9,12 @@ use hashbrown::HashSet;
 
 const SHARD_COUNT: usize = 16;
 
-/// ExtractDb is a concurrent hash-store.
+/// `ExtractDb` is a concurrent hash-store.
 ///
-/// ExtractDb only supplies a push & fetch interface where both are ``&self``.
+/// `ExtractDb` only supplies a push & fetch interface where both are ``&self``.
 /// Once data is inserted it can never be removed. Persistence guaranteed.
 ///
-/// You can think of it as a non-mutable concurrent VecDequeue with unique values only.
+/// You can think of it as a non-mutable concurrent `VecDequeue` with unique values only.
 pub struct ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static
@@ -40,7 +39,7 @@ impl<V> ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static
 {
-    /// Creates a new ExtractDb
+    /// Creates a new `ExtractDb`
     ///
     /// # Examples
     /// ```rust
@@ -81,11 +80,11 @@ impl<V> ExtractDb<V>
     /// ```
     pub fn push(&self, value: V) -> bool {
         let hash = self.data_hasher.hash_one(&value);
-        let shard_index = hash as usize % SHARD_COUNT;
+        let shard_index = hash % SHARD_COUNT as u64;
 
         let data: &'static V = Box::leak(Box::new(value));
 
-        if let Ok(mut data_shard) = self.data_store_shards[shard_index].write() {
+        if let Ok(mut data_shard) = self.data_store_shards[shard_index as usize].write() {
             return match data_shard.insert(data) {
                 true => {
                     self.insertion_queue.push(data).is_ok()
@@ -103,6 +102,9 @@ impl<V> ExtractDb<V>
     ///
     /// # Returns
     /// ``V`` A cloned copy of the internal item
+    ///
+    /// # Errors
+    /// ``Box<dyn Error + '_>`` may return if queue is empty or if loading has a critical error
     ///
     /// # Examples
     /// ```rust
@@ -126,7 +128,7 @@ impl<V> ExtractDb<V>
         }
     }
 
-    /// Get the current count of the fetch_next mutable queue
+    /// Get the current count of the `fetch_next` mutable queue
     ///
     /// # Returns
     /// ``usize`` a total of all items loaded into the temporary fetch vector
@@ -166,9 +168,9 @@ impl<V> ExtractDb<V>
     /// ```
     pub fn internal_count(&self) -> usize {
         let mut global_shard_size = 0;
-        for data_store_shard in self.data_store_shards.deref() {
+        for data_store_shard in &*self.data_store_shards {
             if let Ok(data_shard) = data_store_shard.read() {
-                global_shard_size += data_shard.len()
+                global_shard_size += data_shard.len();
             }
         }
 
