@@ -1,4 +1,6 @@
 # Extract DB
+[![Crates.io](https://img.shields.io/crates/v/extractdb?style=flat-square)](https://crates.io/crates/extractdb) [![docs.rs](https://img.shields.io/docsrs/extractdb?style=flat-square)](https://docs.rs/extractdb/)
+
 A thread-safe, in-memory value store supporting concurrent reads and writes.<br/>
 
 This is not a traditional kv-store, in the sense that it doesn't use any form of keys.<br/>
