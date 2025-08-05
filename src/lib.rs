@@ -27,6 +27,15 @@ pub struct ExtractDb<V>
     removal_store: ConcurrentQueue<&'static V>,
 }
 
+impl<V> Default for ExtractDb<V>
+    where
+        V: Eq + Hash + Clone + 'static
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<V> ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static
