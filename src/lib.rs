@@ -14,7 +14,7 @@ const SHARD_COUNT: usize = 16;
 /// `ExtractDb` only supplies a push & fetch interface where both are ``&self``.
 /// Once data is inserted it can never be removed. Persistence guaranteed.
 ///
-/// You can think of it as a non-mutable concurrent `VecDequeue` with unique values only.
+/// You can think of it as a non-mutable concurrent `VecDeque` with unique values only.
 pub struct ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static

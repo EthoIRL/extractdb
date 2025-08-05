@@ -18,7 +18,7 @@ Specific "item" removal is not supported in favor of a fetching type system and 
 - Write throughput is prioritized over reading performance
 
 # Use scenarios:
-- Concurrent queue with unique items only (HashSet + VecDequeue)-like
+- Concurrent queue with unique items only (HashSet + VecDeque)-like
 - Fast concurrent insertions are needed over concurrent reads
 - Fast reading on a single-thread with multiple concurrent writers
 - Persistent in-memory hash-store
