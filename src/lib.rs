@@ -1,12 +1,19 @@
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
+use std::fs;
 use std::collections::VecDeque;
 use std::error::Error;
+use std::fs::File;
 use std::hash::{BuildHasher, Hash, RandomState};
+use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::RwLock;
 
+use bitcode::{Decode, Encode};
 use concurrent_queue::ConcurrentQueue;
 use hashbrown::HashSet;
+use rayon::iter::*;
 
 const SHARD_COUNT: usize = 16;
 
@@ -18,7 +25,7 @@ const SHARD_COUNT: usize = 16;
 /// You can think of it as a non-mutable concurrent `VecDeque` with unique values only.
 pub struct ExtractDb<V>
     where
-        V: Eq + Hash + Clone + 'static
+        V: Eq + Hash + Clone + 'static + Send + Sync + Encode + for<'a> Decode<'a>
 {
     shard_count: usize,
     data_store_shards: Vec<RwLock<HashSet<&'static V>>>,
@@ -26,20 +33,22 @@ pub struct ExtractDb<V>
 
     insertion_queue: Vec<RwLock<VecDeque<&'static V>>>,
     removal_store: ConcurrentQueue<&'static V>,
+
+    db_directory: Option<PathBuf>,
 }
 
 impl<V> Default for ExtractDb<V>
     where
-        V: Eq + Hash + Clone + 'static
+        V: Eq + Hash + Clone + 'static + Send + Sync + Encode + for<'a> Decode<'a>
 {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
 impl<V> ExtractDb<V>
     where
-        V: Eq + Hash + Clone + 'static
+        V: Eq + Hash + Clone + 'static + Send + Sync + Encode + for<'a> Decode<'a>
 {
     /// Creates a new `ExtractDb`
     ///
@@ -51,8 +60,8 @@ impl<V> ExtractDb<V>
     ///
     /// assert_eq!(db.push("Hello ExtractDb!"), true);
     /// ```
-    pub fn new() -> ExtractDb<V> {
-        Self::new_with_shards(SHARD_COUNT)
+    pub fn new(database_directory: Option<PathBuf>) -> ExtractDb<V> {
+        Self::new_with_shards(SHARD_COUNT, database_directory)
     }
 
     /// Creates a new `ExtractDb` with a specific internal sharding amount
@@ -65,7 +74,7 @@ impl<V> ExtractDb<V>
     ///
     /// assert_eq!(db.push("Hello ExtractDb with custom shards!"), true);
     /// ```
-    pub fn new_with_shards(shard_count: usize) -> ExtractDb<V> {
+    pub fn new_with_shards(shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
         let shards: Vec<RwLock<HashSet<&'static V>>> = (0..shard_count)
             .map(|_| RwLock::new(HashSet::new()))
             .collect();
@@ -79,7 +88,8 @@ impl<V> ExtractDb<V>
             data_store_shards: shards,
             data_hasher: RandomState::new(),
             insertion_queue: queues,
-            removal_store: ConcurrentQueue::unbounded()
+            removal_store: ConcurrentQueue::unbounded(),
+            db_directory: database_directory
         }
     }
 
@@ -213,6 +223,145 @@ impl<V> ExtractDb<V>
             }
         }
 
+        Ok(())
+    }
+
+    pub fn save_to_disk(&self) -> Result<(), Box<dyn Error>> {
+        let database_directory = match &self.db_directory {
+            Some(directory) => directory,
+            None => return Err("No database directory is set. Cannot save to disk without a valid path set!".into())
+        };
+
+        if !database_directory.exists() {
+            fs::create_dir_all(database_directory)?;
+        }
+
+        self.data_store_shards
+            .par_iter()
+            .enumerate()
+            .for_each(|(id, shard)| {
+               if let Ok(data_shard) = shard.read() {
+                   let internal_data: Vec<V> = data_shard.clone().into_iter().cloned().collect();
+                   let encoded_data = bitcode::encode(&internal_data);
+
+                   drop(internal_data);
+
+                   let file_shard_path = &database_directory.join(format!("{id}"));
+
+                   let mut file_shard = match File::create(file_shard_path) {
+                       Ok(file) => file,
+                       Err(err) => {
+                           eprintln!("Failed to create file_shard, ({err})");
+                           return;
+                       }
+                   };
+
+                   if let Err(err) = file_shard.write_all(&encoded_data) {
+                       eprintln!("Failed writing to file_shard, ({err})");
+                   }
+
+                   if let Err(err) = file_shard.flush() {
+                       eprintln!("Failed flushing file_shard, ({err})");
+                   }
+               }
+            });
+
+        Ok(())
+    }
+
+    pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error>> {
+        let database_directory = match &self.db_directory {
+            Some(directory) => directory,
+            None => return Err("No database directory is set. Cannot load from disk without a valid path set!".into())
+        };
+
+        if !database_directory.exists() {
+            return Ok(());
+        }
+
+        let directory_files = match fs::read_dir(database_directory) {
+            Ok(files) => files,
+            Err(_) => return Err("No files present in database directory.".into())
+        };
+
+        let directory_count: usize = match fs::read_dir(database_directory) {
+            Ok(files) => {
+                files.count()
+            },
+            Err(_) => return Err("No files present in database directory.".into())
+        };
+
+        directory_files
+            .par_bridge()
+            .for_each(|potential_file| {
+                if let Ok(file_entry) = potential_file {
+                    let mut file = match File::open(file_entry.path()) {
+                        Ok(file) => file,
+                        Err(err) => {
+                            eprintln!("Failed to open file. Skipping (File: {:?}, Err: {})", file_entry.path(), err);
+                            return;
+                        }
+                    };
+
+                    let mut file_data: Vec<u8> = Vec::new();
+                    match file.read_to_end(&mut file_data) {
+                        Ok(read_size) => {
+                            if read_size == 0 {
+                                eprintln!("No data to read in file. Skipping (File: {:?})", file_entry.path());
+                                return;
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("Failed to read file. Skipping (File: {:?}, Err: {})", file_entry.path(), err);
+                            return;
+                        }
+                    }
+
+                    let decoded_shard_data: Vec<V> = match bitcode::decode(&file_data) {
+                        Ok(data) => data,
+                        Err(err) => {
+                            eprintln!("Failed to decode shard file data. Skipping (File: {:?}, Err: {})", file_entry.path(), err);
+                            return;
+                        }
+                    };
+
+                    // Fall back when shard_count and file_count do not match. (This is slower)
+                    if directory_count != self.shard_count {
+                        decoded_shard_data.into_par_iter().for_each(|item| {
+                            self.push(item);
+                        });
+
+                        return;
+                    }
+
+                    let file_name = match file_entry.file_name().to_str() {
+                        Some(data) => data.to_string(),
+                        None => {
+                            eprintln!("Failed to get file_name. Skipping (File: {:?})", file_entry.path());
+                            return;
+                        }
+                    };
+
+                    let shard_id = match usize::from_str(&file_name) {
+                        Ok(id) => id,
+                        Err(err) => {
+                            eprintln!("Failed to convert string to number. Skipping (File: {:?}, Err: {})", file_entry.path(), err);
+                            return;
+                        }
+                    };
+
+                    if let Ok(mut shard) = self.data_store_shards[shard_id].write() {
+                        if let Ok(mut queue) = self.insertion_queue[shard_id].write() {
+                            for decoded_datum in decoded_shard_data {
+                                let datum: &'static V = Box::leak(Box::new(decoded_datum));
+                                if shard.insert(datum) && re_enqueue {
+                                    queue.push_back(datum);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         Ok(())
     }
 }
