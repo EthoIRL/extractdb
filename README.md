@@ -81,7 +81,7 @@ pub fn main() {
 
 # Testing
 This project includes some basic tests to maintain functionality please use them.
-```
+```text
 cargo test
 ```
 
