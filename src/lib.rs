@@ -52,11 +52,15 @@ impl<V> ExtractDb<V>
 {
     /// Creates a new `ExtractDb`
     ///
+    /// # Arguments
+    /// `database_directory`: Allows saving of data to disk. This is **optional**!
+    ///
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;
     ///
-    /// let db: ExtractDb<&str> = ExtractDb::new();
+    /// // In-memory only example, set a path for save/loading.
+    /// let db: ExtractDb<&str> = ExtractDb::new(None);
     ///
     /// assert_eq!(db.push("Hello ExtractDb!"), true);
     /// ```
@@ -70,7 +74,7 @@ impl<V> ExtractDb<V>
     /// ```rust
     /// use extractdb::ExtractDb;
     ///
-    /// let db: ExtractDb<&str> = ExtractDb::new_with_shards(32);
+    /// let db: ExtractDb<&str> = ExtractDb::new_with_shards(32, None);
     ///
     /// assert_eq!(db.push("Hello ExtractDb with custom shards!"), true);
     /// ```
@@ -103,7 +107,7 @@ impl<V> ExtractDb<V>
     /// ```rust
     /// use extractdb::ExtractDb;
     ///
-    /// let db: ExtractDb<i32> = ExtractDb::new();
+    /// let db: ExtractDb<i32> = ExtractDb::new(None);
     ///
     /// assert_eq!(db.push(100), true);
     /// assert_eq!(db.push(100), false);
@@ -141,7 +145,7 @@ impl<V> ExtractDb<V>
     /// ```rust
     /// use extractdb::ExtractDb;
     ///
-    /// let db: ExtractDb<&str> = ExtractDb::new();
+    /// let db: ExtractDb<&str> = ExtractDb::new(None);
     ///
     /// assert_eq!(db.push("hello world"), true);
     /// assert_eq!(db.fetch_next().unwrap(), &"hello world");
@@ -168,7 +172,7 @@ impl<V> ExtractDb<V>
     /// ```rust
     /// use extractdb::ExtractDb;
     ///
-    /// let db: ExtractDb<u8> = ExtractDb::new();
+    /// let db: ExtractDb<u8> = ExtractDb::new(None);
     ///
     /// assert_eq!(db.push(20), true);
     /// assert_ne!(db.fetch_count(), 1); // No data is currently loaded
@@ -190,7 +194,7 @@ impl<V> ExtractDb<V>
     /// ```rust
     /// use extractdb::ExtractDb;
     ///
-    /// let db: ExtractDb<u8> = ExtractDb::new();
+    /// let db: ExtractDb<u8> = ExtractDb::new(None);
     ///
     /// for i in 0..128 {
     ///     assert_eq!(db.push(i), true);
@@ -226,6 +230,13 @@ impl<V> ExtractDb<V>
         Ok(())
     }
 
+    /// Saves all internal shard data into a serialized database directory.
+    ///
+    /// This method of saving is based off a naive checkpoint based system.
+    /// All data is overwritten during every save.
+    ///
+    /// # Errors
+    /// ``Box<dyn Error>`` may return if database directory is not set or if creating fails.
     pub fn save_to_disk(&self) -> Result<(), Box<dyn Error>> {
         let database_directory = match &self.db_directory {
             Some(directory) => directory,
@@ -269,6 +280,13 @@ impl<V> ExtractDb<V>
         Ok(())
     }
 
+    /// Loads all shard-files back into internal memory
+    ///
+    /// # Arguments
+    /// `re_enqueue`: Loads all data back into fetch queue.
+    ///
+    /// # Errors
+    /// ``Box<dyn Error>`` may return if any form of corruption occurs.
     pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error>> {
         let database_directory = match &self.db_directory {
             Some(directory) => directory,
@@ -379,7 +397,7 @@ mod tests {
     /// This test should always return 1 -> ExtractDb::internal_count()
     #[test]
     fn push() {
-        let db: ExtractDb<i32> = ExtractDb::new();
+        let db: ExtractDb<i32> = ExtractDb::new(None);
 
         db.push(100);
 
@@ -393,7 +411,7 @@ mod tests {
     /// This test should always return 128 -> ExtractDb::internal_count()
     #[test]
     fn push_multiple() {
-        let db: ExtractDb<i32> = ExtractDb::new();
+        let db: ExtractDb<i32> = ExtractDb::new(None);
 
         for count in 0..128 {
             db.push(count);
@@ -410,7 +428,7 @@ mod tests {
     /// This test should always return 1 -> ExtractDb::internal_count()
     #[test]
     fn push_collided() {
-        let db: ExtractDb<i32> = ExtractDb::new();
+        let db: ExtractDb<i32> = ExtractDb::new(None);
 
         db.push(10);
         db.push(10);
@@ -425,7 +443,7 @@ mod tests {
     /// This test should always return (thread_count * insertion_count) -> ExtractDb::internal_count()
     #[test]
     fn push_multi_thread() {
-        let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new());
+        let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(None));
         let thread_count = 4;
         let insertion_count = 128;
 
@@ -455,7 +473,7 @@ mod tests {
     /// This test should always return 0 -> ExtractDb::count()
     #[test]
     fn count_empty_store() {
-        let db: ExtractDb<i32> = ExtractDb::new();
+        let db: ExtractDb<i32> = ExtractDb::new(None);
 
         db.push(0);
         db.push(10);
@@ -473,7 +491,7 @@ mod tests {
     /// This test should always return 4 -> ExtractDb::count()
     #[test]
     fn count_loaded_store() {
-        let db: ExtractDb<i32> = ExtractDb::new();
+        let db: ExtractDb<i32> = ExtractDb::new(None);
 
         db.push(0);
         db.push(10);
@@ -492,7 +510,7 @@ mod tests {
     /// This test should always return True -> ExtractDb::fetch_next().is_ok()
     #[test]
     fn fetch_data() {
-        let db: ExtractDb<i32> = ExtractDb::new();
+        let db: ExtractDb<i32> = ExtractDb::new(None);
 
         db.push(0);
         db.push(1000);
@@ -507,7 +525,7 @@ mod tests {
     /// This test should always return True -> ExtractDb::fetch_next().is_ok()
     #[test]
     fn fetch_data_multiple() {
-        let database: ExtractDb<i64> = ExtractDb::new();
+        let database: ExtractDb<i64> = ExtractDb::new(None);
 
         for i in 0..128 {
             database.push(i);
@@ -525,7 +543,7 @@ mod tests {
     /// This test should always return True -> ExtractDb::fetch_next().is_err()
     #[test]
     fn fetch_data_empty() {
-        let database: ExtractDb<i64> = ExtractDb::new();
+        let database: ExtractDb<i64> = ExtractDb::new(None);
 
         assert!(database.fetch_next().is_err());
     }
@@ -533,7 +551,7 @@ mod tests {
     /// Checks if data is fetched and returned twice from a ExtractDb<i32>
     #[test]
     fn duplicate_fetch() {
-        let database: ExtractDb<i64> = ExtractDb::new();
+        let database: ExtractDb<i64> = ExtractDb::new(None);
 
         assert_eq!(database.push(-1), true);
         assert_eq!(database.fetch_count(), 0);

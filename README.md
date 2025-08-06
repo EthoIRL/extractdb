@@ -38,7 +38,7 @@ extractdb = "0.1.0"
 use extractdb::ExtractDb;
 
 pub fn main() {
-    let database: ExtractDb<i32> = ExtractDb::new();
+    let database: ExtractDb<i32> = ExtractDb::new(None);
 
     database.push(100);
 
@@ -61,7 +61,7 @@ use extractdb::ExtractDb;
 use std::thread;
 
 pub fn main() {
-    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new());
+    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(None));
 
     for thread_id in 0..8 {
         let local_database = Arc::clone(&database);
