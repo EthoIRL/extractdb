@@ -386,8 +386,12 @@ impl<V> ExtractDb<V>
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::net::IpAddr;
     use std::sync::Arc;
     use std::thread;
+    use std::time::{Duration, Instant};
+
     use super::*;
 
     /// Attempts to insert a single value map into the ExtractDb<i32>
@@ -464,6 +468,97 @@ mod tests {
         assert_eq!(database.internal_count(), thread_count * insertion_count);
     }
 
+    #[derive(Eq, PartialEq, Hash, Clone, Encode, Decode)]
+    struct TestStructure {
+        id: u64,
+        duration: Option<Duration>,
+        retries: u32,
+        tags: BTreeSet<String>,
+        metadata: BTreeMap<String, String>,
+        source: Option<IpAddr>,
+        status: Status,
+        name: String,
+        dry_run: bool,
+        error_code: i32,
+        dependencies: Vec<u64>,
+        confidence: i32
+    }
+
+    #[derive(Eq, PartialEq, Hash, Clone, Encode, Decode, Debug)]
+    enum Status {
+        Running,
+        Dead,
+        AliveButDead,
+        QuantumTunneled
+    }
+
+    /// Inserts a unique struct into a ExtractDb<TestStructure>
+    ///
+    /// # Returns
+    ///
+    /// id -> 1219
+    /// duration -> Some(Duration::from_nanos(1))
+    /// retries -> 9281
+    /// tags -> String::from("Hi")
+    /// metadata -> BTreeMap::new()
+    /// source -> None
+    /// status -> Status::QuantumTunneled
+    /// name -> String::from("Really important struct for my really important library")
+    /// dry_run -> false
+    /// error_code -> -299
+    /// dependencies -> vec![0, 28291928, 100]
+    /// confidence -> 100
+    #[test]
+    fn push_structure() {
+        let database: ExtractDb<TestStructure> = ExtractDb::new(None);
+
+        let id = 1219;
+        let duration = Some(Duration::from_nanos(1));
+        let retries = 9281;
+        let mut tags = BTreeSet::new();
+        tags.insert("Hi".to_string());
+        let metadata = BTreeMap::new();
+        let source = None;
+        let status = Status::QuantumTunneled;
+        let name = String::from("Really important struct for my really important library");
+        let dry_run = false;
+        let error_code = -299;
+        let dependencies: Vec<u64> = vec![0, 28291928, 100];
+        let confidence = 100;
+
+        database.push(TestStructure {
+            id,
+            duration,
+            retries,
+            tags: tags.clone(),
+            metadata: metadata.clone(),
+            source,
+            status: status.clone(),
+            name: name.clone(),
+            dry_run,
+            error_code,
+            dependencies: dependencies.clone(),
+            confidence,
+        });
+
+        let structure_fetch = database.fetch_next();
+
+        assert!(structure_fetch.is_ok());
+        let structure = structure_fetch.unwrap();
+
+        assert_eq!(structure.id, id);
+        assert_eq!(structure.duration, duration);
+        assert_eq!(structure.retries, retries);
+        assert_eq!(structure.tags, tags);
+        assert_eq!(structure.metadata, metadata);
+        assert_eq!(structure.source, source);
+        assert_eq!(structure.status, status);
+        assert_eq!(structure.name, name);
+        assert_eq!(structure.dry_run, dry_run);
+        assert_eq!(structure.error_code, error_code);
+        assert_eq!(structure.dependencies, dependencies);
+        assert_eq!(structure.confidence, confidence);
+    }
 
     /// Get count of empty accessible store in a ExtractDb<i32>
     /// The reason this returns an empty count even after insertion is a fetch_next did not occur.
