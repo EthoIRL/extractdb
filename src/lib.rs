@@ -60,9 +60,9 @@ impl<V> ExtractDb<V>
     /// use extractdb::ExtractDb;
     ///
     /// // In-memory only example, set a path for save/loading.
-    /// let db: ExtractDb<&str> = ExtractDb::new(None);
+    /// let db: ExtractDb<String> = ExtractDb::new(None);
     ///
-    /// assert_eq!(db.push("Hello ExtractDb!"), true);
+    /// assert_eq!(db.push("Hello ExtractDb!".to_string()), true);
     /// ```
     pub fn new(database_directory: Option<PathBuf>) -> ExtractDb<V> {
         Self::new_with_shards(SHARD_COUNT, database_directory)
@@ -74,9 +74,9 @@ impl<V> ExtractDb<V>
     /// ```rust
     /// use extractdb::ExtractDb;
     ///
-    /// let db: ExtractDb<&str> = ExtractDb::new_with_shards(32, None);
+    /// let db: ExtractDb<String> = ExtractDb::new_with_shards(32, None);
     ///
-    /// assert_eq!(db.push("Hello ExtractDb with custom shards!"), true);
+    /// assert_eq!(db.push("Hello ExtractDb with custom shards!".to_string()), true);
     /// ```
     pub fn new_with_shards(shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
         let shards: Vec<RwLock<HashSet<&'static V>>> = (0..shard_count)
@@ -145,10 +145,10 @@ impl<V> ExtractDb<V>
     /// ```rust
     /// use extractdb::ExtractDb;
     ///
-    /// let db: ExtractDb<&str> = ExtractDb::new(None);
+    /// let db: ExtractDb<String> = ExtractDb::new(None);
     ///
-    /// assert_eq!(db.push("hello world"), true);
-    /// assert_eq!(db.fetch_next().unwrap(), &"hello world");
+    /// assert_eq!(db.push("hello world".to_string()), true);
+    /// assert_eq!(db.fetch_next().unwrap(), &"hello world".to_string());
     /// assert_eq!(db.internal_count(), 1);
     /// assert_eq!(db.fetch_count(), 0);
     /// ```
