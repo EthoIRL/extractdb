@@ -699,7 +699,7 @@ mod tests {
         let mut found_files = 0;
         let read_dir = fs::read_dir(&test_db_directory).expect("failed to read contents of test_db_directory");
         read_dir.for_each(|potential_file| {
-            if let Ok(file) = potential_file {
+            if potential_file.is_ok() {
                 found_files += 1;
             }
         });
