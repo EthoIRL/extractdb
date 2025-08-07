@@ -282,12 +282,14 @@ impl<V> ExtractDb<V>
 
     /// Loads all shard-files back into internal memory
     ///
+    /// During a failure/corruption event all non-corrupted data will be loaded into memory before an error is omitted out.
+    ///
     /// # Arguments
     /// `re_enqueue`: Loads all data back into fetch queue.
     ///
     /// # Errors
-    /// ``Box<dyn Error>`` may return if any form of corruption occurs.
-    pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error>> {
+    /// ``Box<dyn Error + Send + Sync>`` may return if any form of corruption occurs, or if a shard size changes.
+    pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
         let Some(database_directory) = &self.db_directory else {
             return Err("No database directory is set. Cannot load from disk without a valid path set!".into())
         };
@@ -307,77 +309,66 @@ impl<V> ExtractDb<V>
             Err(_) => return Err("No files present in database directory.".into())
         };
 
-        directory_files
+        let load_results: Vec<Result<(), Box<dyn Error + Send + Sync>>> = directory_files
             .par_bridge()
-            .for_each(|potential_file| {
-                if let Ok(file_entry) = potential_file {
-                    let mut file = match File::open(file_entry.path()) {
-                        Ok(file) => file,
-                        Err(err) => {
-                            eprintln!("Failed to open file. Skipping (File: {}, Err: {})", file_entry.path().display(), err);
-                            return;
-                        }
-                    };
+            .map(|potential_file| -> Result<(), Box<dyn Error + Send + Sync>> {
+                let file_entry = potential_file
+                    .map_err(|_| "No file found in dir_entry")?;
 
-                    let mut file_data: Vec<u8> = Vec::new();
-                    match file.read_to_end(&mut file_data) {
-                        Ok(read_size) => {
-                            if read_size == 0 {
-                                eprintln!("No data to read in file. Skipping (File: {})", file_entry.path().display());
-                                return;
-                            }
-                        }
-                        Err(err) => {
-                            eprintln!("Failed to read file. Skipping (File: {}, Err: {})", file_entry.path().display(), err);
-                            return;
-                        }
+                let mut file = File::open(file_entry.path())
+                    .map_err(|err| format!("Failed to open file. Skipping (Err: {err})"))?;
+                let mut file_data: Vec<u8> = Vec::new();
+
+                let size = file.read_to_end(&mut file_data)
+                    .map_err(|err| format!("Failed to read file. Skipping (Err: {err})"))?;
+
+                if size == 0 {
+                    return Err(format!("No data to read in file. Skipping ({})", file_entry.path().display()).into());
+                }
+
+                let decoded_shard_data: Vec<V> = bitcode::decode(&file_data)
+                    .map_err(|err| format!("Failed to decode shard file data. Skipping (Err: {err})"))?;
+
+                if directory_count != self.shard_count {
+                    decoded_shard_data.into_par_iter().for_each(|item| {
+                        self.push(item);
+                    });
+
+                    return Err("Soft error: Shard miss-match, converting to current shard_size!".into());
+                }
+
+                let file_name = match file_entry.file_name().to_str() {
+                    Some(data) => data.to_string(),
+                    None => {
+                        return Err(format!("Failed to get file_name. Skipping (File: {})", file_entry.path().display()).into());
                     }
+                };
 
-                    let decoded_shard_data: Vec<V> = match bitcode::decode(&file_data) {
-                        Ok(data) => data,
-                        Err(err) => {
-                            eprintln!("Failed to decode shard file data. Skipping (File: {}, Err: {})", file_entry.path().display(), err);
-                            return;
-                        }
-                    };
+                let shard_id = usize::from_str(&file_name)
+                    .map_err(|err| format!("Failed to convert string to number. Skipping (File: {}, Err: {})", file_entry.path().display(), err))?;
 
-                    // Fall back when shard_count and file_count do not match. (This is slower)
-                    if directory_count != self.shard_count {
-                        decoded_shard_data.into_par_iter().for_each(|item| {
-                            self.push(item);
-                        });
 
-                        return;
-                    }
+                let mut shard = self.data_store_shards[shard_id].write()
+                    .map_err(|err| format!("Failed to acquire data_store_shards lock (Err: {err})"))?;
+                let mut queue = self.insertion_queue[shard_id].write()
+                    .map_err(|err| format!("Failed to acquire insertion_queue lock (Err: {err})"))?;
 
-                    let file_name = match file_entry.file_name().to_str() {
-                        Some(data) => data.to_string(),
-                        None => {
-                            eprintln!("Failed to get file_name. Skipping (File: {})", file_entry.path().display());
-                            return;
-                        }
-                    };
-
-                    let shard_id = match usize::from_str(&file_name) {
-                        Ok(id) => id,
-                        Err(err) => {
-                            eprintln!("Failed to convert string to number. Skipping (File: {}, Err: {})", file_entry.path().display(), err);
-                            return;
-                        }
-                    };
-
-                    if let Ok(mut shard) = self.data_store_shards[shard_id].write() {
-                        if let Ok(mut queue) = self.insertion_queue[shard_id].write() {
-                            for decoded_datum in decoded_shard_data {
-                                let datum: &'static V = Box::leak(Box::new(decoded_datum));
-                                if shard.insert(datum) && re_enqueue {
-                                    queue.push_back(datum);
-                                }
-                            }
-                        }
+                for decoded_datum in decoded_shard_data {
+                    let datum: &'static V = Box::leak(Box::new(decoded_datum));
+                    if shard.insert(datum) && re_enqueue {
+                        queue.push_back(datum);
                     }
                 }
-            });
+
+                Ok(())
+            }).collect();
+
+        for load_result in load_results {
+            if load_result.is_err() {
+                return load_result;
+            }
+        }
+
         Ok(())
     }
 }
@@ -775,7 +766,7 @@ mod tests {
         assert_eq!(new_database.internal_count(), 0);
         assert_eq!(new_database.fetch_count(), 0);
 
-        assert!(new_database.load_from_disk(false).is_ok());
+        assert!(new_database.load_from_disk(false).is_err());
 
         assert_ne!(new_database.internal_count(), 10000);
         assert_eq!(new_database.fetch_count(), 0);
@@ -806,7 +797,7 @@ mod tests {
         assert_eq!(new_database.internal_count(), 0);
         assert_eq!(new_database.fetch_count(), 0);
 
-        assert!(new_database.load_from_disk(false).is_ok());
+        assert!(new_database.load_from_disk(false).is_err());
 
         assert_eq!(new_database.internal_count(), 10000);
         assert_eq!(new_database.fetch_count(), 0);
