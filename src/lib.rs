@@ -142,7 +142,7 @@ impl<V> ExtractDb<V>
     /// This function may act as a FIFO during low contention scenarios. Order is not guaranteed.
     ///
     /// # Returns
-    /// ``V`` A cloned copy of the internal item
+    /// ``V`` A reference of the internal item
     ///
     /// # Errors
     /// ``Box<dyn Error + '_>`` may return if queue is empty or if loading has a critical error
