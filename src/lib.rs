@@ -70,6 +70,11 @@ impl<V> ExtractDb<V>
 
     /// Creates a new `ExtractDb` with a specific internal sharding amount
     ///
+    /// # Arguments
+    /// `shard_count`: Shards to be used internally. Think more shards = more concurrency, vice versa.
+    ///
+    /// `database_directory`: Allows saving of data to disk. This is **optional**!
+    ///
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;
@@ -97,11 +102,12 @@ impl<V> ExtractDb<V>
         }
     }
 
-    /// Pushes data into the internal sharded hashset.
+    /// Pushes data `V` into the internal sharded hashset.
     ///
     /// # Returns
-    /// ``True`` if data has successfully inserted into a hashset
-    /// ``False`` if data has already been added to a hashset, or if the internal shard is poisoned
+    /// ``True``: if data has successfully inserted into a hashset
+    ///
+    /// ``False``: if data has already been added to a hashset, or if the internal shard is poisoned
     ///
     /// # Examples
     /// ```rust
@@ -175,9 +181,9 @@ impl<V> ExtractDb<V>
     /// let db: ExtractDb<u8> = ExtractDb::new(None);
     ///
     /// assert_eq!(db.push(20), true);
-    /// assert_ne!(db.fetch_count(), 1); // No data is currently loaded
+    /// assert_eq!(db.fetch_count(), 0); // No data is currently loaded
     /// assert_eq!(db.fetch_next().unwrap(), &20); // Causes a load for the non-mutable vector
-    /// assert_eq!(db.fetch_count(), 0);
+    /// assert_ne!(db.fetch_count(), 1);
     /// ```
     pub fn fetch_count(&self) -> usize {
         self.removal_store.len()
