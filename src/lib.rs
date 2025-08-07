@@ -13,7 +13,7 @@ use std::sync::RwLock;
 use bitcode::{Decode, Encode};
 use concurrent_queue::ConcurrentQueue;
 use hashbrown::HashSet;
-use rayon::iter::*;
+use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, IntoParallelIterator};
 
 const SHARD_COUNT: usize = 16;
 
@@ -238,9 +238,8 @@ impl<V> ExtractDb<V>
     /// # Errors
     /// ``Box<dyn Error>`` may return if database directory is not set or if creating fails.
     pub fn save_to_disk(&self) -> Result<(), Box<dyn Error>> {
-        let database_directory = match &self.db_directory {
-            Some(directory) => directory,
-            None => return Err("No database directory is set. Cannot save to disk without a valid path set!".into())
+        let Some(database_directory) = &self.db_directory else {
+            return Err("No database directory is set. Cannot save to disk without a valid path set!".into())
         };
 
         if !database_directory.exists() {
@@ -288,18 +287,16 @@ impl<V> ExtractDb<V>
     /// # Errors
     /// ``Box<dyn Error>`` may return if any form of corruption occurs.
     pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error>> {
-        let database_directory = match &self.db_directory {
-            Some(directory) => directory,
-            None => return Err("No database directory is set. Cannot load from disk without a valid path set!".into())
+        let Some(database_directory) = &self.db_directory else {
+            return Err("No database directory is set. Cannot load from disk without a valid path set!".into())
         };
 
         if !database_directory.exists() {
             return Ok(());
         }
 
-        let directory_files = match fs::read_dir(database_directory) {
-            Ok(files) => files,
-            Err(_) => return Err("No files present in database directory.".into())
+        let Ok(directory_files) = fs::read_dir(database_directory) else {
+            return Err("No files present in database directory.".into())
         };
 
         let directory_count: usize = match fs::read_dir(database_directory) {
@@ -316,7 +313,7 @@ impl<V> ExtractDb<V>
                     let mut file = match File::open(file_entry.path()) {
                         Ok(file) => file,
                         Err(err) => {
-                            eprintln!("Failed to open file. Skipping (File: {:?}, Err: {})", file_entry.path(), err);
+                            eprintln!("Failed to open file. Skipping (File: {}, Err: {})", file_entry.path().display(), err);
                             return;
                         }
                     };
@@ -325,12 +322,12 @@ impl<V> ExtractDb<V>
                     match file.read_to_end(&mut file_data) {
                         Ok(read_size) => {
                             if read_size == 0 {
-                                eprintln!("No data to read in file. Skipping (File: {:?})", file_entry.path());
+                                eprintln!("No data to read in file. Skipping (File: {})", file_entry.path().display());
                                 return;
                             }
                         }
                         Err(err) => {
-                            eprintln!("Failed to read file. Skipping (File: {:?}, Err: {})", file_entry.path(), err);
+                            eprintln!("Failed to read file. Skipping (File: {}, Err: {})", file_entry.path().display(), err);
                             return;
                         }
                     }
@@ -338,7 +335,7 @@ impl<V> ExtractDb<V>
                     let decoded_shard_data: Vec<V> = match bitcode::decode(&file_data) {
                         Ok(data) => data,
                         Err(err) => {
-                            eprintln!("Failed to decode shard file data. Skipping (File: {:?}, Err: {})", file_entry.path(), err);
+                            eprintln!("Failed to decode shard file data. Skipping (File: {}, Err: {})", file_entry.path().display(), err);
                             return;
                         }
                     };
@@ -355,7 +352,7 @@ impl<V> ExtractDb<V>
                     let file_name = match file_entry.file_name().to_str() {
                         Some(data) => data.to_string(),
                         None => {
-                            eprintln!("Failed to get file_name. Skipping (File: {:?})", file_entry.path());
+                            eprintln!("Failed to get file_name. Skipping (File: {})", file_entry.path().display());
                             return;
                         }
                     };
@@ -363,7 +360,7 @@ impl<V> ExtractDb<V>
                     let shard_id = match usize::from_str(&file_name) {
                         Ok(id) => id,
                         Err(err) => {
-                            eprintln!("Failed to convert string to number. Skipping (File: {:?}, Err: {})", file_entry.path(), err);
+                            eprintln!("Failed to convert string to number. Skipping (File: {}, Err: {})", file_entry.path().display(), err);
                             return;
                         }
                     };

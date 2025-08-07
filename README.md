@@ -18,7 +18,7 @@ Specific "item" removal is not supported in favor of a fetching type system and 
 - Write throughput is prioritized over reading performance
 
 # Use scenarios:
-- Concurrent queue with unique items only (HashSet + VecDeque)-like
+- Concurrent queue with unique items only (`HashSet` + `VecDeque`)-like
 - Fast concurrent insertions are needed over concurrent reads
 - Fast reading on a single-thread with multiple concurrent writers
 - Persistent in-memory hash-store
@@ -37,7 +37,7 @@ extractdb = "0.1.0"
 ```rust
 use extractdb::ExtractDb;
 
-pub fn main() {
+fn main() {
     let database: ExtractDb<i32> = ExtractDb::new(None);
 
     database.push(100);
@@ -60,7 +60,7 @@ use std::sync::Arc;
 use extractdb::ExtractDb;
 use std::thread;
 
-pub fn main() {
+fn main() {
     let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(None));
 
     for thread_id in 0..8 {
