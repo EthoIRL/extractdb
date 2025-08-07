@@ -89,4 +89,4 @@ cargo test
 Pull request and issue contributions are very welcome. Please feel free to suggest changes in PRs/Issues :)
 
 # License
-This project is licensed under [GPL-3.0](LICENSE)
+This project is licensed under either [MIT](LICENSE) or [Apache-2.0](LICENSE-APACHE), you choose.
