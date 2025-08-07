@@ -79,11 +79,29 @@ fn main() {
 }
 ```
 
-# Testing
+# Testing + More examples
 This project includes some basic tests to maintain functionality please use them.
 ```text
 cargo test
 ```
+
+See internal doc-comments for more indepth information about each test:
+- `push`
+- `push_multiple`
+- `push_collided`
+- `push_multi_thread`
+- `push_structure`
+- `count_empty_store`
+- `count_loaded_store`
+- `fetch_data`
+- `fetch_data_multiple`
+- `fetch_data_empty`
+- `duplicate_fetch`
+- `save_state_to_disk`
+- `load_state_from_disk`
+- `load_corrupted_state_from_disk`
+- `load_shard_mismatch_from_disk`
+- `load_mismatch_type_from_disk`
 
 # Contributing
 Pull request and issue contributions are very welcome. Please feel free to suggest changes in PRs/Issues :)
