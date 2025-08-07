@@ -243,7 +243,7 @@ impl<V> ExtractDb<V>
     ///
     /// # Errors
     /// ``Box<dyn Error>`` may return if database directory is not set or if creating fails.
-    pub fn save_to_disk(&self) -> Result<(), Box<dyn Error>> {
+    pub fn save_to_disk(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let Some(database_directory) = &self.db_directory else {
             return Err("No database directory is set. Cannot save to disk without a valid path set!".into())
         };
@@ -255,34 +255,29 @@ impl<V> ExtractDb<V>
         self.data_store_shards
             .par_iter()
             .enumerate()
-            .for_each(|(id, shard)| {
-               if let Ok(data_shard) = shard.read() {
-                   let internal_data: Vec<V> = data_shard.clone().into_iter().cloned().collect();
-                   let encoded_data = bitcode::encode(&internal_data);
+            .try_for_each(|(id, shard)| -> Result<(), Box<dyn Error + Send + Sync>> {
+                let data_shard = shard
+                    .read()
+                    .map_err(|_| format!("Shard {id} failed to read lock"))?;
 
-                   drop(internal_data);
+                let internal_data: Vec<V> = data_shard.clone().into_iter().cloned().collect();
+                let encoded_data = bitcode::encode(&internal_data);
 
-                   let file_shard_path = &database_directory.join(format!("{id}"));
+                let file_shard_path = &database_directory.join(format!("{id}"));
 
-                   let mut file_shard = match File::create(file_shard_path) {
-                       Ok(file) => file,
-                       Err(err) => {
-                           eprintln!("Failed to create file_shard, ({err})");
-                           return;
-                       }
-                   };
+                let mut file_shard = File::create(file_shard_path)
+                    .map_err(|err| format!("Failed to create/truncate file for Shard {id}, ({err})"))?;
 
-                   if let Err(err) = file_shard.write_all(&encoded_data) {
-                       eprintln!("Failed writing to file_shard, ({err})");
-                   }
+                file_shard
+                    .write_all(&encoded_data)
+                    .map_err(|err| format!("Failed to write to File Shard {id}, ({err})"))?;
 
-                   if let Err(err) = file_shard.flush() {
-                       eprintln!("Failed flushing file_shard, ({err})");
-                   }
-               }
-            });
+                file_shard
+                    .flush()
+                    .map_err(|err| format!("Failed to flush File Shard {id}, ({err})"))?;
 
-        Ok(())
+                Ok(())
+            })
     }
 
     /// Loads all shard-files back into internal memory
