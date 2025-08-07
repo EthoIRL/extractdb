@@ -628,7 +628,7 @@ mod tests {
         }
     }
 
-    /// Fetches data from a empty ExtractDb<i32>
+    /// Fetches data from an empty ExtractDb<i32>
     ///
     /// # Returns
     ///
