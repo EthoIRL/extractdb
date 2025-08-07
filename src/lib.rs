@@ -17,7 +17,7 @@ use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIter
 
 const SHARD_COUNT: usize = 16;
 
-/// `ExtractDb` is a concurrent hash-store.
+/// `ExtractDb` is a thread-safe, in-memory hash store supporting concurrent fetches and writes.
 ///
 /// `ExtractDb` only supplies a push & fetch interface where both are ``&self``.
 /// Once data is inserted it can never be removed. Persistence guaranteed.

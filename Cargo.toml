@@ -8,7 +8,7 @@ repository = "https://github.com/EthoIRL/extractdb"
 homepage = "https://github.com/EthoIRL/extractdb"
 documentation = "https://docs.rs/extractdb"
 readme = "README.md"
-description = "Concurrent value-pull hash database"
+description = "A thread-safe, in-memory hash store supporting concurrent fetches and writes."
 keywords = ["concurrent", "hashset", "database"]
 categories = ["database", "concurrency", "data-structures"]
 
