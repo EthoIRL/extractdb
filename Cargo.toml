@@ -2,7 +2,7 @@
 name = "extractdb"
 version = "0.1.0"
 edition = "2024"
-license = "GPL-3"
+license = "MIT OR Apache-2.0"
 authors = ["EthoIRL"]
 repository = "https://github.com/EthoIRL/extractdb"
 homepage = "https://github.com/EthoIRL/extractdb"
