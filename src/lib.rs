@@ -727,7 +727,7 @@ mod tests {
 
         assert!(database.save_to_disk().is_ok());
 
-        drop(database);
+        drop(database); // Done to conserve memory during testing
 
         let new_database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
         assert_eq!(new_database.internal_count(), 0);
@@ -761,7 +761,7 @@ mod tests {
         }
 
         assert!(database.save_to_disk().is_ok());
-        drop(database);
+        drop(database); // Done to conserve memory during testing
 
         let mut deleted_files = 0;
         let read_dir = fs::read_dir(&test_db_directory).expect("failed to read contents of test_db_directory");
@@ -805,7 +805,7 @@ mod tests {
         }
 
         assert!(database.save_to_disk().is_ok());
-        drop(database);
+        drop(database); // Done to conserve memory during testing
 
         let new_database: ExtractDb<u64> = ExtractDb::new_with_shards(48, Some(test_db_directory.clone()));
         assert_eq!(new_database.internal_count(), 0);
@@ -836,7 +836,7 @@ mod tests {
         }
 
         assert!(database.save_to_disk().is_ok());
-        drop(database);
+        drop(database); // Done to conserve memory during testing
 
         let new_database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
 
