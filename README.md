@@ -24,10 +24,9 @@ Specific "item" removal is not supported in favor of a fetching type system and 
 - [License](#license)
 
 # Guarantees.
-- Fetching is guaranteed however out-of-order (Not FIFO/FILO)
-- Fetching will never output duplicates
-- Fetching & pushing are fully thread-safe functions
-- Once inserted never removed (**Read-only**)
+- All items will eventually be fetched (no duplication), but ordering is non-deterministic (Not FIFO or FILO)
+- Items are never removed once inserted (**append-only** / **reference-fetching**)
+- All functions are thread safe
 
 # Trade-offs.
 - No item removal
