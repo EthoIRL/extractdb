@@ -996,3 +996,4 @@ mod tests {
 
         fs::remove_dir_all(test_db_directory).expect("Failed to delete residual test directory!?");
     }
+}
