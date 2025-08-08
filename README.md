@@ -32,8 +32,8 @@ This was originally built for a web-scraper which needs to write lots of links w
 extractdb = "0.1.0"
 ```
 
-# Example
-- Simple push, fetch, & count example:
+# Examples
+### Push, fetch, & count
 ```rust
 use extractdb::ExtractDb;
 
@@ -54,7 +54,7 @@ fn main() {
 }
 ```
 
-- Simple multithreaded insert & fetch example:
+### Multithreaded insert & fetch
 ```rust
 use std::sync::Arc;
 use extractdb::ExtractDb;
@@ -79,8 +79,8 @@ fn main() {
 }
 ```
 
-- Insertion with basic loading and saving
-```rust,no_run
+### Disk loading and saving
+```rust
 use std::path::PathBuf;
 use extractdb::ExtractDb;
 
