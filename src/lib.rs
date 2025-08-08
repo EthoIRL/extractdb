@@ -364,9 +364,7 @@ impl<V> ExtractDb<V>
             }).collect();
 
         for load_result in load_results {
-            if load_result.is_err() {
-                return load_result;
-            }
+            load_result?;
         }
 
         Ok(())
