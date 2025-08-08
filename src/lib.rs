@@ -444,7 +444,7 @@ impl<V> ExtractDb<V>
     /// # Examples
     /// ```
     /// use std::sync::Arc;
-    /// use std::sync::atomic::AtomicBool;
+    /// use std::sync::atomic::{AtomicBool, Ordering};
     /// use extractdb::{CheckpointSettings, ExtractDb};
     ///
     /// let db: Arc<ExtractDb<u8>> = Arc::new(ExtractDb::new(None));
@@ -454,7 +454,12 @@ impl<V> ExtractDb<V>
     /// save_settings.minimum_changes = 1000;
     ///
     /// // Will now check for 1000 minimum changes every 30seconds (default).
-    /// ExtractDb::background_checkpoints(save_settings, db);
+    /// ExtractDb::background_checkpoints(save_settings, db.clone());
+    ///
+    /// db.push(127);
+    ///
+    /// // Gracefully shutdown a background thread
+    /// shutdown_flag.store(true, Ordering::Relaxed);
     /// ```
     pub fn background_checkpoints(settings: CheckpointSettings, db: Arc<ExtractDb<V>>) {
         thread::spawn(move || {
