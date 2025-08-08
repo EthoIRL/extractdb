@@ -25,6 +25,54 @@ const SHARD_COUNT: usize = 16;
 /// Once data is inserted it can never be removed. Persistence guaranteed.
 ///
 /// You can think of it as a non-mutable concurrent `VecDeque` with unique values only.
+///
+/// # Examples
+/// Basic single threaded insertion example
+/// ```no_run
+/// use std::path::PathBuf;
+/// use extractdb::ExtractDb;
+///
+/// let db: ExtractDb<i32> = ExtractDb::new(Some(PathBuf::from("/home/user/database_name")));
+///
+/// db.load_from_disk(true).unwrap();
+///
+/// db.push(100);
+///
+/// let item = db.fetch_next().unwrap();
+///
+/// db.save_to_disk().unwrap();
+/// ```
+///
+/// # Autosaving
+/// Multithreading capable, `Arc<ExtractDb>` with background auto saving.
+/// ```no_run
+/// use std::path::PathBuf;
+/// use std::sync::Arc;
+/// use std::sync::atomic::{AtomicBool, Ordering};
+/// use std::time::Duration;
+/// use extractdb::{CheckpointSettings, ExtractDb};
+///
+/// let db: Arc<ExtractDb<i32>> = Arc::new(ExtractDb::new(Some(PathBuf::from("/home/user/database_name"))));
+///
+/// db.load_from_disk(true).unwrap();
+///
+/// let shutdown_flag = Arc::new(AtomicBool::new(false));
+/// let mut save_settings = CheckpointSettings::new(shutdown_flag.clone());
+/// save_settings.minimum_changes = 10; // Minimum 10 changes
+/// save_settings.check_delay = Duration::from_secs(5); // Check every 5 seconds
+///
+/// // Begin background saving thread
+/// ExtractDb::background_checkpoints(save_settings, db.clone());
+///
+/// for i in 0..30 {
+///     db.push(i);
+/// }
+///
+/// let item = db.fetch_next().unwrap();
+///
+/// // Exit background thread
+/// shutdown_flag.store(true, Ordering::Relaxed);
+/// ```
 pub struct ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static + Send + Sync + Encode + for<'a> Decode<'a>
