@@ -96,6 +96,34 @@ fn main() {
 }
 ```
 
+### Auto saving
+```rust
+use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use extractdb::{CheckpointSettings, ExtractDb};
+
+fn main() {
+    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(Some(PathBuf::from("./test_db"))));
+
+    // `True`: Load all items back into `fetch_next` queue
+    database.load_from_disk(true).unwrap();
+
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let mut save_settings = CheckpointSettings::new(shutdown_flag.clone());
+    save_settings.minimum_changes = 1000;
+    
+    // Will now check for 1000 minimum changes every 30seconds (default).
+    ExtractDb::background_checkpoints(save_settings, database.clone());
+    
+    // Perform single/multithreaded logic
+    database.push("Hello world!".to_string());
+
+    // Gracefully shutdown a background thread
+    shutdown_flag.store(true, Ordering::Relaxed);
+}
+```
+
 # Testing + More examples
 This project includes some basic tests to maintain functionality please use them.
 ```text
