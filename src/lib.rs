@@ -1,5 +1,5 @@
 #![warn(missing_docs)]
-#![doc = include_str!("../README.md")]
+#![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
 use std::{fs, thread};
 use std::collections::VecDeque;
 use std::error::Error;
