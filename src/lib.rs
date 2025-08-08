@@ -152,7 +152,7 @@ impl<V> ExtractDb<V>
         }
     }
 
-    /// Pushes data [`V`] into the internal sharded hashset.
+    /// Pushes data `V` into the internal sharded hashset.
     ///
     /// # Returns
     /// ``True``: if data has successfully inserted into a hashset
@@ -192,7 +192,7 @@ impl<V> ExtractDb<V>
     /// This function may act as a FIFO during low contention scenarios. Order is not guaranteed.
     ///
     /// # Returns
-    /// [`V`] A reference of the internal item
+    /// `V` A reference of the internal item
     ///
     /// # Errors
     /// [`Box<dyn Error + '_>`] may return if queue is empty or if loading has a critical error
