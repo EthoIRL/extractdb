@@ -19,12 +19,12 @@ use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIter
 
 const SHARD_COUNT: usize = 16;
 
-/// `ExtractDb` is a thread-safe, in-memory hash store supporting concurrent fetches and writes.
+/// [`ExtractDb`] is a thread-safe, in-memory hash store supporting concurrent fetches and writes.
 ///
-/// `ExtractDb` only supplies a push & fetch interface where both are ``&self``.
+/// [`ExtractDb`] only supplies a push & fetch interface where both are ``&self``.
 /// Once data is inserted it can never be removed. Persistence guaranteed.
 ///
-/// You can think of it as a non-mutable concurrent `VecDeque` with unique values only.
+/// You can think of it as a non-mutable concurrent [`VecDeque`] with unique values only.
 ///
 /// # Examples
 /// Basic single threaded insertion example
@@ -44,7 +44,7 @@ const SHARD_COUNT: usize = 16;
 /// ```
 ///
 /// # Autosaving
-/// Multithreading capable, `Arc<ExtractDb>` with background auto saving.
+/// Multithreading capable, [`Arc<ExtractDb<V>>`] with background auto saving.
 /// ```no_run
 /// use std::path::PathBuf;
 /// use std::sync::Arc;
@@ -100,7 +100,7 @@ impl<V> ExtractDb<V>
     where
         V: Eq + Hash + Clone + 'static + Send + Sync + Encode + for<'a> Decode<'a>
 {
-    /// Creates a new `ExtractDb`
+    /// Creates a new [`ExtractDb`]
     ///
     /// # Arguments
     /// `database_directory`: Allows saving of data to disk. This is **optional**!
@@ -118,7 +118,7 @@ impl<V> ExtractDb<V>
         Self::new_with_shards(SHARD_COUNT, database_directory)
     }
 
-    /// Creates a new `ExtractDb` with a specific internal sharding amount
+    /// Creates a new [`ExtractDb`] with a specific internal sharding amount
     ///
     /// # Arguments
     /// `shard_count`: Shards to be used internally. Think more shards = more concurrency, vice versa.
@@ -152,7 +152,7 @@ impl<V> ExtractDb<V>
         }
     }
 
-    /// Pushes data `V` into the internal sharded hashset.
+    /// Pushes data [`V`] into the internal sharded hashset.
     ///
     /// # Returns
     /// ``True``: if data has successfully inserted into a hashset
@@ -192,10 +192,10 @@ impl<V> ExtractDb<V>
     /// This function may act as a FIFO during low contention scenarios. Order is not guaranteed.
     ///
     /// # Returns
-    /// ``V`` A reference of the internal item
+    /// [`V`] A reference of the internal item
     ///
     /// # Errors
-    /// ``Box<dyn Error + '_>`` may return if queue is empty or if loading has a critical error
+    /// [`Box<dyn Error + '_>`] may return if queue is empty or if loading has a critical error
     ///
     /// # Examples
     /// ```rust
@@ -222,7 +222,7 @@ impl<V> ExtractDb<V>
     /// Get the current count of the `fetch_next` mutable queue
     ///
     /// # Returns
-    /// ``usize`` a total of all items loaded into the temporary fetch vector
+    /// [`usize`] a total of all items loaded into the temporary fetch vector
     ///
     /// # Examples
     /// ```rust
@@ -244,7 +244,7 @@ impl<V> ExtractDb<V>
     /// This function is impacted by writes and may be slowed.
     ///
     /// # Returns
-    /// ``usize`` a total of all items in the entire sharded database.
+    /// [`usize`] a total of all items in the entire sharded database.
     ///
     /// # Examples
     /// ```rust
@@ -292,7 +292,7 @@ impl<V> ExtractDb<V>
     /// All data is overwritten during every save.
     ///
     /// # Errors
-    /// ``Box<dyn Error>`` may return if database directory is not set or if creating fails.
+    /// [`Box<dyn Error>`] may return if database directory is not set or if creating fails.
     pub fn save_to_disk(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let Some(database_directory) = &self.db_directory else {
             return Err("No database directory is set. Cannot save to disk without a valid path set!".into())
@@ -338,7 +338,7 @@ impl<V> ExtractDb<V>
     /// `re_enqueue`: Loads all data back into fetch queue.
     ///
     /// # Errors
-    /// ``Box<dyn Error + Send + Sync>`` may return if any form of corruption occurs, or if a shard size changes.
+    /// [`Box<dyn Error + Send + Sync>`] may return if any form of corruption occurs, or if a shard size changes.
     pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
         let Some(database_directory) = &self.db_directory else {
             return Err("No database directory is set. Cannot load from disk without a valid path set!".into())
