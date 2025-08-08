@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
-use std::fs;
+use std::{fs, thread};
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fs::File;
@@ -8,7 +8,9 @@ use std::hash::{BuildHasher, Hash, RandomState};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use bitcode::{Decode, Encode};
 use concurrent_queue::ConcurrentQueue;
@@ -368,6 +370,121 @@ impl<V> ExtractDb<V>
         }
 
         Ok(())
+    }
+
+    /// Spawns a background thread to provide periodic save checkpoints onto disk.
+    /// Only performs a save if a certain threshold of changes has occurred during the save interval.
+    /// See `CheckpointSettings`
+    ///
+    /// This function is meant for long-running applications/multithreaded instances.
+    ///
+    /// Use `check_delay` within [`CheckpointSettings`] to determine the frequency in which change counts occur.
+    ///
+    /// Use `minimum_changes` within [`CheckpointSettings`] to determine the minimum amount of items inserted before a safe event occurs.
+    ///
+    /// Use `shutdown_flag` within [`CheckpointSettings`] to remotely shut down this thread in a safe manner. `False` = Running, `True` = Please stop
+    ///
+    /// # Different behavior
+    /// You do not necessarily need to use this function for auto-saving. All methods used are publicly available and easily re-implementable. See source.
+    ///
+    /// # Parameters
+    ///
+    /// `settings`: [`CheckpointSettings`] determines the check rate and minimum change for disk saving.
+    ///
+    /// `db`: [`Arc<ExtractDb<V>>`] instance of [`ExtractDb`] in a shared instance
+    ///
+    /// # Examples
+    /// ```
+    /// use std::sync::Arc;
+    /// use std::sync::atomic::AtomicBool;
+    /// use extractdb::{CheckpointSettings, ExtractDb};
+    ///
+    /// let db: Arc<ExtractDb<u8>> = Arc::new(ExtractDb::new(None));
+    ///
+    /// let shutdown_flag = Arc::new(AtomicBool::new(false));
+    /// let mut save_settings = CheckpointSettings::new(shutdown_flag.clone());
+    /// save_settings.minimum_changes = 1000;
+    ///
+    /// // Will now check for 1000 minimum changes every 30seconds (default).
+    /// ExtractDb::background_checkpoints(save_settings, db);
+    /// ```
+    pub fn background_checkpoints(settings: CheckpointSettings, db: Arc<ExtractDb<V>>) {
+        thread::spawn(move || {
+            let mut last_checkpoint_count: usize = db.internal_count();
+
+            while !settings.shutdown_flag.load(Ordering::Relaxed) {
+                thread::sleep(settings.check_delay);
+
+                let current_change = db.internal_count();
+                let changes_since_last = current_change - last_checkpoint_count;
+
+                if changes_since_last >= settings.minimum_changes {
+                    match db.save_to_disk() {
+                        Ok(()) => {
+                            last_checkpoint_count = current_change;
+                        },
+                        Err(err) => {
+                            eprintln!("Database checkpoint failed. ({err})");
+                        }
+                    }
+                }
+            }
+
+            let changes_since_last =  db.internal_count() - last_checkpoint_count;
+
+            if changes_since_last > 0 {
+                // Force a save no matter what, ensures all data is written.
+                if let Err(err) = db.save_to_disk() {
+                    eprintln!("Database last-minute checkpoint failed. ({err})");
+                }
+            }
+        });
+    }
+}
+
+/// Configuration settings for the provided [`ExtractDb::background_checkpoints`].
+///
+/// # Examples
+/// ```
+/// use std::sync::Arc;
+/// use std::sync::atomic::{AtomicBool, Ordering};
+/// use std::time::Duration;
+/// use extractdb::{CheckpointSettings, ExtractDb};
+///
+/// let shutdown_flag = Arc::new(AtomicBool::new(false));
+/// let mut save_settings = CheckpointSettings::new(shutdown_flag.clone());
+///
+/// save_settings.minimum_changes = 30;
+///
+/// // Checks every 5 seconds for >=30 changes.
+/// save_settings.check_delay = Duration::from_secs(5);
+///
+/// // Gracefully shutdown a background thread
+/// shutdown_flag.store(true, Ordering::Relaxed);
+/// ```
+pub struct CheckpointSettings {
+    /// Interval at which the `internal_count` is checked
+    ///
+    /// e.g. Check the number of pushes every X seconds.
+    pub check_delay: Duration,
+
+    /// Minimum number of changes from the last disk write needed for a new disk write.
+    ///
+    /// e.g. Write to disk after 200 push insertions.
+    pub minimum_changes: usize,
+
+    /// A flag to safely shut down the internal watcher thread. Use this to gracefully shutdown & save state
+    pub shutdown_flag: Arc<AtomicBool>
+}
+
+impl CheckpointSettings {
+    /// Generic default settings for auto-saving in [`ExtractDb::background_checkpoints`].
+    pub fn new(shutdown_flag: Arc<AtomicBool>) -> Self {
+        CheckpointSettings {
+            check_delay: Duration::from_secs(30),
+            minimum_changes: 1000,
+            shutdown_flag
+        }
     }
 }
 
