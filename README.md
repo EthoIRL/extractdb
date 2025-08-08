@@ -33,6 +33,15 @@ extractdb = "0.1.0"
 ```
 
 # Examples
+Table of contents
+1. Basics
+   1. [Push, Fetch, & count](#push-fetch--count)
+2. Multithreaded 
+   1. [Multithreaded insert & fetch](#multithreaded-insert--fetch)
+3. Disk 
+   1. [Disk loading and saving](#disk-loading-and-saving)
+   2. [Auto saving](#auto-saving)
+
 ### Push, fetch, & count
 ```rust
 use extractdb::ExtractDb;
@@ -119,7 +128,7 @@ fn main() {
     // Perform single/multithreaded logic
     database.push("Hello world!".to_string());
 
-    // Gracefully shutdown a background thread
+    // Gracefully shutdown the background saving thread
     shutdown_flag.store(true, Ordering::Relaxed);
 }
 ```
