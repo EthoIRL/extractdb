@@ -6,6 +6,23 @@ A thread-safe, in-memory hash store supporting concurrent fetches and writes.<br
 This is not a traditional kv-store, in the sense that it doesn't use any form of keys.<br/>
 Specific "item" removal is not supported in favor of a fetching type system and can be thought of as a read-only dequeue database.
 
+# Table of contents
+- [Guarantees](#guarantees)
+- [Trade-offs](#trade-offs)
+- [Use scenarios](#use-scenarios)
+- [Installation](#installation)
+- [Examples](#examples)
+  - Basics
+    - [Push, Fetch, & count](#push-fetch--count) 
+  - Multithreaded
+    - [Multithreaded insert & fetch](#multithreaded-insert--fetch)
+  - Disk
+    - [Disk loading and saving](#disk-loading-and-saving)
+    - [Auto saving](#auto-saving)
+- [Testing](#testing--more-examples)
+- [Contributing](#contributing)
+- [License](#license)
+
 # Guarantees.
 - Fetching is guaranteed however out-of-order (Not FIFO/FILO)
 - Fetching will never output duplicates
@@ -33,14 +50,6 @@ extractdb = "0.1.0"
 ```
 
 # Examples
-Table of contents
-1. Basics
-   1. [Push, Fetch, & count](#push-fetch--count)
-2. Multithreaded 
-   1. [Multithreaded insert & fetch](#multithreaded-insert--fetch)
-3. Disk 
-   1. [Disk loading and saving](#disk-loading-and-saving)
-   2. [Auto saving](#auto-saving)
 
 ### Push, fetch, & count
 ```rust
@@ -122,7 +131,8 @@ fn main() {
     let mut save_settings = CheckpointSettings::new(shutdown_flag.clone());
     save_settings.minimum_changes = 1000;
     
-    // Will now check for 1000 minimum changes every 30seconds (default).
+    // Spawns a background watcher thread. 
+    // This checks for a minimum of 1000 changes every 30 seconds (default)
     ExtractDb::background_checkpoints(save_settings, database.clone());
     
     // Perform single/multithreaded logic
