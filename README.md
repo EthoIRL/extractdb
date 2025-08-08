@@ -79,6 +79,23 @@ fn main() {
 }
 ```
 
+- Insertion with basic loading and saving
+```rust,no_run
+use std::path::PathBuf;
+use extractdb::ExtractDb;
+
+fn main() {
+    let database: ExtractDb<String> = ExtractDb::new(Some(PathBuf::from("./test_db")));
+
+    // `True`: Load all items back into `fetch_next` queue
+    database.load_from_disk(true).unwrap();
+
+    database.push("Hello world!".to_string());
+
+    database.save_to_disk().unwrap();
+}
+```
+
 # Testing + More examples
 This project includes some basic tests to maintain functionality please use them.
 ```text
