@@ -463,7 +463,7 @@ impl<V> ExtractDb<V>
     /// ```
     pub fn background_checkpoints(settings: CheckpointSettings, db: Arc<ExtractDb<V>>) {
         thread::spawn(move || {
-            let mut last_checkpoint_count: usize = db.internal_count();
+            let mut last_checkpoint_count: usize = 0;
 
             while !settings.shutdown_flag.load(Ordering::Relaxed) {
                 thread::sleep(settings.check_delay);
@@ -547,7 +547,7 @@ mod tests {
     use std::net::IpAddr;
     use std::sync::Arc;
     use std::{env, panic, thread};
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use super::*;
 
