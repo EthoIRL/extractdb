@@ -208,7 +208,7 @@ impl<V> ExtractDb<V>
     /// assert_eq!(db.internal_count(), 1);
     /// assert_eq!(db.fetch_count(), 0);
     /// ```
-    pub fn fetch_next(&self) -> Result<&V, Box<dyn Error + '_>> {
+    pub fn fetch_next(&self) -> Result<&'static V, Box<dyn Error + '_>> {
         if self.removal_store.is_empty() {
             self.load_shards_to_accessible()?;
         }
