@@ -4,7 +4,7 @@ use std::{fs, thread};
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fs::File;
-use std::hash::{BuildHasher, Hash, RandomState};
+use std::hash::{BuildHasher, Hash};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -16,6 +16,7 @@ use bitcode::{Decode, Encode};
 use concurrent_queue::ConcurrentQueue;
 use hashbrown::HashSet;
 use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, IntoParallelIterator};
+use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 const SHARD_COUNT: usize = 16;
 
@@ -79,10 +80,10 @@ pub struct ExtractDb<V>
 {
     shard_count: usize,
     data_store_shards: Vec<RwLock<HashSet<&'static V>>>,
-    data_hasher: RandomState,
 
     insertion_queue: Vec<RwLock<VecDeque<&'static V>>>,
     removal_store: ConcurrentQueue<&'static V>,
+    data_hasher: Xxh3DefaultBuilder,
 
     db_directory: Option<PathBuf>,
 }
@@ -145,8 +146,8 @@ impl<V> ExtractDb<V>
         ExtractDb {
             shard_count,
             data_store_shards: shards,
-            data_hasher: RandomState::new(),
             insertion_queue: queues,
+            data_hasher: Xxh3DefaultBuilder::new(),
             removal_store: ConcurrentQueue::unbounded(),
             db_directory: database_directory
         }

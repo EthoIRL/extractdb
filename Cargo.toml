@@ -16,4 +16,4 @@ categories = ["database", "concurrency", "data-structures"]
 hashbrown = "0.15.4"
 concurrent-queue = "2.5.0"
 bitcode = "0.6.6"
-rayon = "1.10.0"
+rayon = "1.10.0"xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
