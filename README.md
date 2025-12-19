@@ -53,16 +53,17 @@ extractdb = "0.1.0"
 ### Push, fetch, & count
 ```rust
 use extractdb::ExtractDb;
+use std::sync::Arc;
 
 fn main() {
     let database: ExtractDb<i32> = ExtractDb::new(None);
 
-    database.push(100);
+    database.push(Arc::new(100));
 
     let total_items_in_db = database.internal_count();
     let mut items_in_quick_access_memory = 0;
     if total_items_in_db > 0 {
-        let item: &i32 = database.fetch_next().unwrap();
+        let item: Arc<i32> = database.fetch_next().unwrap();
 
         items_in_quick_access_memory = database.fetch_count();
     }
@@ -83,7 +84,7 @@ fn main() {
     for thread_id in 0..8 {
         let local_database = Arc::clone(&database);
         thread::spawn(move || {
-            local_database.push(format!("Hello from thread {}", thread_id))
+            local_database.push(Arc::new(format!("Hello from thread {}", thread_id)))
         });
     }
 
@@ -99,6 +100,7 @@ fn main() {
 ### Disk loading and saving
 ```rust
 use std::path::PathBuf;
+use std::sync::Arc;
 use extractdb::ExtractDb;
 
 fn main() {
@@ -107,7 +109,7 @@ fn main() {
     // `True`: Load all items back into `fetch_next` queue
     database.load_from_disk(true).unwrap();
 
-    database.push("Hello world!".to_string());
+    database.push(Arc::new("Hello world!".to_string()));
 
     database.save_to_disk().unwrap();
 }
@@ -121,7 +123,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use extractdb::{CheckpointSettings, ExtractDb};
 
 fn main() {
-    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(Some(PathBuf::from("./test_db"))));
+    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(Some(PathBuf::from("./test_db_2"))));
 
     // `True`: Load all items back into `fetch_next` queue
     database.load_from_disk(true).unwrap();
@@ -135,7 +137,7 @@ fn main() {
     ExtractDb::background_checkpoints(save_settings, database.clone());
     
     // Perform single/multithreaded logic
-    database.push("Hello world!".to_string());
+    database.push(Arc::new("Hello world!".to_string()));
 
     // Gracefully shutdown the background saving thread
     shutdown_flag.store(true, Ordering::Relaxed);
