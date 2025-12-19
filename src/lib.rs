@@ -194,10 +194,13 @@ impl<V> ExtractDb<V>
     }
 
     fn push_shard(&self, value: Arc<V>, shard_index: usize, hash: u64) -> bool {
-        if let Ok(mut data_shard) = self.data_store[shard_index].write() {
-            if !data_shard.insert(hash) {
-                return false;
-            }
+        match self.data_store[shard_index].write() {
+            Ok(mut data_shard) => {
+                if !data_shard.insert(hash) {
+                    return false;
+                }
+            },
+            Err(_) => return false
         }
 
         match self.disk_queue[shard_index].write() {
