@@ -389,7 +389,7 @@ impl<V> ExtractDb<V>
                     .drain(..)
                     .collect();
 
-                if  internal_data.is_empty() {
+                if internal_data.is_empty() {
                     return Ok(());
                 }
                 
@@ -512,7 +512,7 @@ impl<V> ExtractDb<V>
                     .map_err(|err| format!("Failed to read file. Skipping (Err: {err})"))?;
 
                 if size == 0 {
-                    return Err(format!("No data to read in file. Skipping ({})", file_entry.path().display()).into());
+                    return Ok(());
                 }
 
                 let decoded_shard_data: Vec<u64> = bitcode::decode(&file_data)
