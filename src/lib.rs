@@ -168,7 +168,7 @@ impl<V> ExtractDb<V>
         }
     }
 
-    /// Pushes data `V` into the internal sharded hashset.
+    /// Pushes data `Arc<V>` into the internal sharded hashset.
     ///
     /// # Returns
     /// ``True``: if data has successfully inserted into a hashset
@@ -225,7 +225,7 @@ impl<V> ExtractDb<V>
     /// This function may act as a FIFO during low contention scenarios. Order is not guaranteed.
     ///
     /// # Returns
-    /// `V` A reference of the internal item
+    /// `Arc<V>` A reference of the internal item
     ///
     /// # Errors
     /// [`Box<dyn Error + '_>`] may return if queue is empty or if loading has a critical error
@@ -324,11 +324,16 @@ impl<V> ExtractDb<V>
 
     /// Saves all internal shard data into a serialized database directory.
     ///
-    /// This method of saving is based off a naive checkpoint based system.
-    /// All data is overwritten during every save.
+    /// # Layout
+    /// - Store:
+    ///     Holds the hash's for all known items within the database. This is crucial for maintaining item uniqueness.
+    ///     This is overwritten every save.
+    /// - Data:
+    ///     `Arc<V>` data is held within this subdirectory.
+    ///     This is appended to disk every save (0-XXXXXXXXXX..(SHARD_COUNT-1)-XXXXXXXXXX). Files are formatted with UTC Timestamp seconds to avoid collision.
     ///
     /// # Errors
-    /// [`Box<dyn Error>`] may return if database directory is not set or if creating fails.
+    /// [`Box<dyn Error>`] may return if database directory is not set or if saving fails.
     pub fn save_to_disk(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         let Some(database_directory) = &self.db_directory else {
             return Err("No database directory is set. Cannot save to disk without a valid path set!".into())
@@ -430,6 +435,7 @@ impl<V> ExtractDb<V>
     ///
     /// # Errors
     /// [`Box<dyn Error + Send + Sync>`] may return if any form of corruption occurs, or if a shard size changes.
+    /// **Missing any store files will be considered fully corrupted. While data files will be recovered to the best of its ability without an error.**
     pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
         let Some(database_directory) = &self.db_directory else {
             return Err("No database directory is set. Cannot load from disk without a valid path set!".into())
@@ -640,7 +646,7 @@ impl<V> ExtractDb<V>
     /// Use `shutdown_flag` within [`CheckpointSettings`] to remotely shut down this thread in a safe manner. `False` = Running, `True` = Please stop
     ///
     /// # Different behavior
-    /// You do not necessarily need to use this function for auto-saving. All methods used are publicly available and easily re-implementable. See source.
+    /// You do not necessarily need to use this function for auto-saving. All methods used are publicly accessible and easily re-implementable. See source.
     ///
     /// # Parameters
     ///
