@@ -662,7 +662,7 @@ impl<V> ExtractDb<V>
     /// // Gracefully shutdown a background thread
     /// shutdown_flag.store(true, Ordering::Relaxed);
     /// ```
-    pub fn background_checkpoints(settings: CheckpointSettings, db: Arc<ExtractDb<Arc<V>>>)
+    pub fn background_checkpoints(settings: CheckpointSettings, db: Arc<ExtractDb<V>>)
     where 
         V: 'static
     {
