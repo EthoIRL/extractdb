@@ -246,7 +246,7 @@ impl<V> ExtractDb<V>
 
         match self.removal_store.pop() {
             Ok(value) => Ok(value),
-            Err(_) => Err("Failed to access data from accessible_store".into())
+            Err(_) => Err("Failed to pop data from removal_store".into())
         }
     }
 
