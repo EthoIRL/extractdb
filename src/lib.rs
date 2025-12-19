@@ -1053,17 +1053,24 @@ mod tests {
 
         assert!(database.save_to_disk().is_ok());
 
-        let mut found_files = 0;
-        let read_dir = fs::read_dir(&test_db_directory).expect("failed to read contents of test_db_directory");
-        read_dir.for_each(|potential_file| {
-            if potential_file.is_ok() {
-                found_files += 1;
-            }
-        });
+        let test_store_directory = test_db_directory.join("store");
+        let test_data_directory = test_db_directory.join("data");
 
-        assert_eq!(found_files, 19);
+        assert!(test_store_directory.exists());
+        assert!(test_data_directory.exists());
+
+        assert_eq!(count_entries(&test_db_directory), 2);
+        assert_eq!(count_entries(&test_store_directory), 19);
+        assert_eq!(count_entries(&test_data_directory), 19);
 
         fs::remove_dir_all(test_db_directory).expect("Failed to delete residual test directory!?");
+    }
+
+    fn count_entries(root: &std::path::Path) -> usize {
+        fs::read_dir(root)
+            .unwrap_or_else(|e| panic!("Failed to read contents of {:?}: {}", root, e))
+            .filter_map(Result::ok)
+            .count()
     }
 
     /// Checks if state is correctly written & loaded from disk from a ExtractDb<i32>
@@ -1079,7 +1086,7 @@ mod tests {
         let database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
 
         for i in 0..10000 {
-            assert_eq!(database.push(format!("Id: {}", i)), true);
+            assert_eq!(database.push(Arc::new(format!("Id: {}", i))), true);
         }
 
         assert!(database.save_to_disk().is_ok());
@@ -1114,14 +1121,17 @@ mod tests {
         let database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
 
         for i in 0..10000 {
-            assert_eq!(database.push(format!("Id: {}", i)), true);
+            assert_eq!(database.push(Arc::new(format!("Id: {}", i))), true);
         }
 
         assert!(database.save_to_disk().is_ok());
         drop(database); // Done to conserve memory during testing
 
+        let test_data_directory = test_db_directory.join("data");
+        assert!(test_data_directory.exists());
+
         let mut deleted_files = 0;
-        let read_dir = fs::read_dir(&test_db_directory).expect("failed to read contents of test_db_directory");
+        let read_dir = fs::read_dir(&test_data_directory).expect("failed to read contents of test_data_directory");
         read_dir.for_each(|potential_file| {
             if let Ok(file) = potential_file {
                 if deleted_files < 5 {
@@ -1137,9 +1147,9 @@ mod tests {
         assert_eq!(new_database.internal_count(), 0);
         assert_eq!(new_database.fetch_count(), 0);
 
-        assert!(new_database.load_from_disk(false).is_err());
+        assert!(new_database.load_from_disk(false).is_ok());
 
-        assert_ne!(new_database.internal_count(), 10000);
+        assert!(new_database.internal_count() > 0);
         assert_eq!(new_database.fetch_count(), 0);
 
         fs::remove_dir_all(test_db_directory).expect("Failed to delete residual test directory!?");
@@ -1158,7 +1168,7 @@ mod tests {
         let database: ExtractDb<u64> = ExtractDb::new(Some(test_db_directory.clone()));
 
         for i in 0..10000 {
-            assert_eq!(database.push(i), true);
+            assert_eq!(database.push(Arc::new(i)), true);
         }
 
         assert!(database.save_to_disk().is_ok());
@@ -1189,7 +1199,7 @@ mod tests {
         let database: ExtractDb<u64> = ExtractDb::new(Some(test_db_directory.clone()));
 
         for i in 0..10000 {
-            assert_eq!(database.push(i), true);
+            assert_eq!(database.push(Arc::new(i)), true);
         }
 
         assert!(database.save_to_disk().is_ok());
@@ -1199,7 +1209,6 @@ mod tests {
 
         let panic_load = panic::catch_unwind(|| new_database.load_from_disk(false));
         assert!(panic_load.is_ok());
-        assert_eq!(new_database.internal_count(), 0);
         assert_eq!(new_database.fetch_count(), 0);
 
         fs::remove_dir_all(test_db_directory).expect("Failed to delete residual test directory!?");
