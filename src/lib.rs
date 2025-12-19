@@ -32,13 +32,14 @@ const SHARD_COUNT: usize = 16;
 /// Basic single threaded insertion example
 /// ```no_run
 /// use std::path::PathBuf;
+/// use std::sync::Arc;
 /// use extractdb::ExtractDb;
 ///
 /// let db: ExtractDb<i32> = ExtractDb::new(Some(PathBuf::from("/home/user/database_name")));
 ///
 /// db.load_from_disk(true).unwrap();
 ///
-/// db.push(100);
+/// db.push(Arc::new(100));
 ///
 /// let item = db.fetch_next().unwrap();
 ///
@@ -67,7 +68,7 @@ const SHARD_COUNT: usize = 16;
 /// ExtractDb::background_checkpoints(save_settings, db.clone());
 ///
 /// for i in 0..30 {
-///     db.push(i);
+///     db.push(Arc::new(i));
 /// }
 ///
 /// let item = db.fetch_next().unwrap();
@@ -113,11 +114,12 @@ impl<V> ExtractDb<V>
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;
+    /// use std::sync::Arc;
     ///
     /// // In-memory only example, set a path for save/loading.
     /// let db: ExtractDb<String> = ExtractDb::new(None);
     ///
-    /// assert_eq!(db.push("Hello ExtractDb!".to_string()), true);
+    /// assert_eq!(db.push(Arc::new("Hello ExtractDb!".to_string())), true);
     /// ```
     pub fn new(database_directory: Option<PathBuf>) -> ExtractDb<V> {
         Self::new_with_shards(SHARD_COUNT, database_directory)
@@ -133,10 +135,11 @@ impl<V> ExtractDb<V>
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;
+    /// use std::sync::Arc;
     ///
     /// let db: ExtractDb<String> = ExtractDb::new_with_shards(32, None);
     ///
-    /// assert_eq!(db.push("Hello ExtractDb with custom shards!".to_string()), true);
+    /// assert_eq!(db.push(Arc::new("Hello ExtractDb with custom shards!".to_string())), true);
     /// ```
     pub fn new_with_shards(shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
         let data_store: Vec<RwLock<HashSet<u64>>> = (0..shard_count)
@@ -172,11 +175,12 @@ impl<V> ExtractDb<V>
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;
+    /// use std::sync::Arc;
     ///
     /// let db: ExtractDb<i32> = ExtractDb::new(None);
     ///
-    /// assert_eq!(db.push(100), true);
-    /// assert_eq!(db.push(100), false);
+    /// assert_eq!(db.push(Arc::new(100)), true);
+    /// assert_eq!(db.push(Arc::new(100)), false);
     /// assert_eq!(db.internal_count(), 1);
     /// ```
     pub fn push(&self, value: Arc<V>) -> bool {
@@ -223,11 +227,12 @@ impl<V> ExtractDb<V>
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;
+    /// use std::sync::Arc;
     ///
     /// let db: ExtractDb<String> = ExtractDb::new(None);
     ///
-    /// assert_eq!(db.push("hello world".to_string()), true);
-    /// assert_eq!(db.fetch_next().unwrap(), &"hello world".to_string());
+    /// assert_eq!(db.push(Arc::new("hello world".to_string())), true);
+    /// assert_eq!(db.fetch_next().unwrap(), Arc::new("hello world".to_string()));
     /// assert_eq!(db.internal_count(), 1);
     /// assert_eq!(db.fetch_count(), 0);
     /// ```
@@ -250,12 +255,13 @@ impl<V> ExtractDb<V>
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;
+    /// use std::sync::Arc;
     ///
     /// let db: ExtractDb<u8> = ExtractDb::new(None);
     ///
-    /// assert_eq!(db.push(20), true);
+    /// assert_eq!(db.push(Arc::new(20)), true);
     /// assert_eq!(db.fetch_count(), 0); // No data is currently loaded
-    /// assert_eq!(db.fetch_next().unwrap(), &20); // Causes a load for the non-mutable vector
+    /// assert_eq!(db.fetch_next().unwrap(), Arc::new(20)); // Causes a load for the non-mutable vector
     /// assert_ne!(db.fetch_count(), 1);
     /// ```
     pub fn fetch_count(&self) -> usize {
@@ -272,11 +278,12 @@ impl<V> ExtractDb<V>
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;
+    /// use std::sync::Arc;
     ///
     /// let db: ExtractDb<u8> = ExtractDb::new(None);
     ///
     /// for i in 0..128 {
-    ///     assert_eq!(db.push(i), true);
+    ///     assert_eq!(db.push(Arc::new(i)), true);
     /// }
     /// assert_eq!(db.internal_count(), 128);
     /// ```
@@ -650,7 +657,7 @@ impl<V> ExtractDb<V>
     /// // Will now check for 1000 minimum changes every 30seconds (default).
     /// ExtractDb::background_checkpoints(save_settings, db.clone());
     ///
-    /// db.push(127);
+    /// db.push(Arc::new(127));
     ///
     /// // Gracefully shutdown a background thread
     /// shutdown_flag.store(true, Ordering::Relaxed);
@@ -756,7 +763,7 @@ mod tests {
     fn push() {
         let db: ExtractDb<i32> = ExtractDb::new(None);
 
-        db.push(100);
+        db.push(Arc::new(100));
 
         assert_eq!(db.internal_count(), 1);
     }
@@ -771,7 +778,7 @@ mod tests {
         let db: ExtractDb<i32> = ExtractDb::new(None);
 
         for count in 0..128 {
-            db.push(count);
+            db.push(Arc::new(count));
         }
 
         assert_eq!(db.internal_count(), 128);
@@ -787,8 +794,8 @@ mod tests {
     fn push_collided() {
         let db: ExtractDb<i32> = ExtractDb::new(None);
 
-        db.push(10);
-        db.push(10);
+        db.push(Arc::new(10));
+        db.push(Arc::new(10));
 
         assert_eq!(db.internal_count(), 1);
     }
@@ -809,7 +816,7 @@ mod tests {
             let reference_database = Arc::clone(&database);
             threads.push(thread::spawn(move || {
                 for count in 0..insertion_count {
-                    reference_database.push(format!("{}-{}", thread_id, count));
+                    reference_database.push(Arc::new(format!("{}-{}", thread_id, count)));
                 }
             }));
         }
@@ -879,7 +886,7 @@ mod tests {
         let dependencies: Vec<u64> = vec![0, 28291928, 100];
         let confidence = 100;
 
-        database.push(TestStructure {
+        database.push(Arc::new(TestStructure {
             id,
             duration,
             retries,
@@ -892,7 +899,7 @@ mod tests {
             error_code,
             dependencies: dependencies.clone(),
             confidence,
-        });
+        }));
 
         let structure_fetch = database.fetch_next();
 
@@ -923,10 +930,10 @@ mod tests {
     fn count_empty_store() {
         let db: ExtractDb<i32> = ExtractDb::new(None);
 
-        db.push(0);
-        db.push(10);
-        db.push(100);
-        db.push(1000);
+        db.push(Arc::new(0));
+        db.push(Arc::new(10));
+        db.push(Arc::new(100));
+        db.push(Arc::new(1000));
 
         assert_eq!(db.fetch_count(), 0);
     }
@@ -941,10 +948,10 @@ mod tests {
     fn count_loaded_store() {
         let db: ExtractDb<i32> = ExtractDb::new(None);
 
-        db.push(0);
-        db.push(10);
-        db.push(100);
-        db.push(1000);
+        db.push(Arc::new(0));
+        db.push(Arc::new(10));
+        db.push(Arc::new(100));
+        db.push(Arc::new(1000));
 
         db.fetch_next().unwrap();
 
@@ -960,8 +967,8 @@ mod tests {
     fn fetch_data() {
         let db: ExtractDb<i32> = ExtractDb::new(None);
 
-        db.push(0);
-        db.push(1000);
+        db.push(Arc::new(0));
+        db.push(Arc::new(1000));
 
         assert!(db.fetch_next().is_ok());
     }
@@ -976,7 +983,7 @@ mod tests {
         let database: ExtractDb<i64> = ExtractDb::new(None);
 
         for i in 0..128 {
-            database.push(i);
+            database.push(Arc::new(i));
         }
 
         for _ in 0..128 {
@@ -1001,21 +1008,21 @@ mod tests {
     fn duplicate_fetch() {
         let database: ExtractDb<i64> = ExtractDb::new(None);
 
-        assert_eq!(database.push(-1), true);
+        assert_eq!(database.push(Arc::new(-1)), true);
         assert_eq!(database.fetch_count(), 0);
 
         let initial_value = database.fetch_next().unwrap();
 
-        assert_eq!(initial_value, &-1);
+        assert_eq!(initial_value, Arc::from(-1));
 
         for i in 0..100 {
-            assert_eq!(database.push(i), true);
+            assert_eq!(database.push(Arc::new(i)), true);
         }
 
         assert_eq!(database.fetch_count(), 0);
 
         for i in 0..100 {
-            assert_eq!(database.push(i + 1000), true);
+            assert_eq!(database.push(Arc::new(i + 1000)), true);
         }
 
         for _ in 0..200 {
@@ -1041,7 +1048,7 @@ mod tests {
         let database: ExtractDb<i32> = ExtractDb::new_with_shards(19, Some(test_db_directory.clone()));
 
         for i in 0..10000 {
-            assert_eq!(database.push(i), true);
+            assert_eq!(database.push(Arc::new(i)), true);
         }
 
         assert!(database.save_to_disk().is_ok());
