@@ -85,12 +85,12 @@ pub struct ExtractDb<V>
 {
     shard_count: usize,
 
-    data_store: Vec<RwLock<HashSet<u64>>>,
-    disk_queue: Vec<RwLock<VecDeque<Arc<V>>>>,
+    data_store: Box<[RwLock<HashSet<u64>>]>,
+    disk_queue: Box<[RwLock<VecDeque<Arc<V>>>]>,
 
     data_hasher: Xxh3DefaultBuilder,
 
-    insertion_queue: Vec<RwLock<VecDeque<Arc<V>>>>,
+    insertion_queue: Box<[RwLock<VecDeque<Arc<V>>>]>,
     removal_store: ConcurrentQueue<Arc<V>>,
 
     db_directory: Option<PathBuf>,
@@ -145,15 +145,13 @@ impl<V> ExtractDb<V>
     /// assert_eq!(db.push(Arc::new("Hello ExtractDb with custom shards!".to_string())), true);
     /// ```
     pub fn new_with_shards(shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
-        let data_store: Vec<RwLock<HashSet<u64>>> = (0..shard_count)
+        let data_store: Box<[RwLock<HashSet<u64>>]> = (0..shard_count)
             .map(|_| RwLock::new(HashSet::new()))
             .collect();
-
-        let disk_queue: Vec<RwLock<VecDeque<Arc<V>>>> = (0..shard_count)
+        let disk_queue: Box<[RwLock<VecDeque<Arc<V>>>]> = (0..shard_count)
             .map(|_| RwLock::new(VecDeque::new()))
             .collect();
-        
-        let insertion_queues: Vec<RwLock<VecDeque<Arc<V>>>> = (0..shard_count)
+        let insertion_queues: Box<[RwLock<VecDeque<Arc<V>>>]> = (0..shard_count)
             .map(|_| RwLock::new(VecDeque::new()))
             .collect();
 
