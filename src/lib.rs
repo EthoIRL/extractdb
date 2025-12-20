@@ -1,7 +1,6 @@
 #![warn(missing_docs)]
 #![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
 use std::{fs, thread};
-use std::collections::VecDeque;
 use std::error::Error;
 use std::fs::File;
 use std::hash::{BuildHasher, Hash};
@@ -97,8 +96,8 @@ pub struct ExtractDb<V>
 struct Shard<V>
 {
     data_store: RwLock<HashSet<u64, Xxh3DefaultBuilder>>,
-    disk_queue: RwLock<VecDeque<Arc<V>>>,
-    insertion_queue: RwLock<VecDeque<Arc<V>>>,
+    disk_queue: RwLock<Vec<Arc<V>>>,
+    insertion_queue: RwLock<Vec<Arc<V>>>,
 }
 
 impl<V> Default for ExtractDb<V>
@@ -157,8 +156,8 @@ impl<V> ExtractDb<V>
         let shards: Box<[Shard<V>]> = (0..shard_count)
             .map(|_| Shard {
                 data_store: RwLock::new(HashSet::<u64, Xxh3DefaultBuilder>::default()),
-                disk_queue: RwLock::new(VecDeque::new()),
-                insertion_queue: RwLock::new(VecDeque::new())
+                disk_queue: RwLock::new(Vec::new()),
+                insertion_queue: RwLock::new(Vec::new())
             })
             .collect();
 
@@ -209,14 +208,14 @@ impl<V> ExtractDb<V>
 
         match self.shards[shard_index].disk_queue.write() {
             Ok(mut queue) => {
-                queue.push_back(Arc::clone(&value));
+                queue.push(Arc::clone(&value));
             },
             Err(_) => return false
         }
 
         match self.shards[shard_index].insertion_queue.write() {
             Ok(mut queue) => {
-                queue.push_back(value);
+                queue.push(value);
             },
             Err(_) => return false
         }
@@ -315,7 +314,7 @@ impl<V> ExtractDb<V>
                     continue;
                 }
 
-                while let Some(item) = write_queue.pop_front() {
+                while let Some(item) = write_queue.pop() {
                     if self.removal_store.push(item).is_err() {
                         return Err("Failed to load sharded data into removal_store queue".into());
                     }
@@ -607,7 +606,7 @@ impl<V> ExtractDb<V>
                             let new_shard_index = hash & self.shard_mask;
                     
                             if let Ok(mut queue) = self.shards[new_shard_index as usize].insertion_queue.write() {
-                                queue.push_back(datum);
+                                queue.push(datum);
                             }
                         }
                     
@@ -618,7 +617,7 @@ impl<V> ExtractDb<V>
                         let datum = Arc::new(decoded_datum);
 
                         if let Ok(mut queue) = self.shards[shard_id].insertion_queue.write() {
-                            queue.push_back(datum);
+                            queue.push(datum);
                         }
                     }
                     
