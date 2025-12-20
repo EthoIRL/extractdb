@@ -1,11 +1,13 @@
 #![warn(missing_docs)]
 #![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
 use std::{fs, thread};
+use std::any::Any;
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fs::File;
-use std::hash::{BuildHasher, Hash};
+use std::hash::{BuildHasher, BuildHasherDefault, Hash};
 use std::io::{Read, Write};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -15,9 +17,9 @@ use std::time::Duration;
 use bitcode::{Decode, Encode};
 use chrono::Utc;
 use concurrent_queue::ConcurrentQueue;
-use hashbrown::HashSet;
+use hashbrown::{DefaultHashBuilder, HashSet};
 use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, IntoParallelIterator};
-use xxhash_rust::xxh3::Xxh3DefaultBuilder;
+use xxhash_rust::xxh3::{Xxh3Builder, Xxh3DefaultBuilder};
 
 #[cfg(test)]
 mod tests;
@@ -95,7 +97,7 @@ pub struct ExtractDb<V>
 #[repr(align(128))]
 struct Shard<V>
 {
-    data_store: RwLock<HashSet<u64>>,
+    data_store: RwLock<HashSet<u64, Xxh3DefaultBuilder>>,
     disk_queue: RwLock<VecDeque<Arc<V>>>,
     insertion_queue: RwLock<VecDeque<Arc<V>>>,
 }
@@ -151,7 +153,7 @@ impl<V> ExtractDb<V>
     pub fn new_with_shards(shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
         let shards: Box<[Shard<V>]> = (0..shard_count)
             .map(|_| Shard {
-                data_store: RwLock::new(HashSet::new()),
+                data_store: RwLock::new(HashSet::<u64, Xxh3DefaultBuilder>::default()),
                 disk_queue: RwLock::new(VecDeque::new()),
                 insertion_queue: RwLock::new(VecDeque::new())
             })
