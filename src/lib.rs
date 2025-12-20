@@ -84,16 +84,20 @@ pub struct ExtractDb<V>
         V: Eq + Hash + Clone + Send + Sync + Encode + for<'a> Decode<'a>
 {
     shard_count: usize,
-
-    data_store: Box<[RwLock<HashSet<u64>>]>,
-    disk_queue: Box<[RwLock<VecDeque<Arc<V>>>]>,
+    shards: Box<[Shard<V>]>,
 
     data_hasher: Xxh3DefaultBuilder,
-
-    insertion_queue: Box<[RwLock<VecDeque<Arc<V>>>]>,
     removal_store: ConcurrentQueue<Arc<V>>,
 
     db_directory: Option<PathBuf>,
+}
+
+#[repr(align(128))]
+struct Shard<V>
+{
+    data_store: RwLock<HashSet<u64>>,
+    disk_queue: RwLock<VecDeque<Arc<V>>>,
+    insertion_queue: RwLock<VecDeque<Arc<V>>>,
 }
 
 impl<V> Default for ExtractDb<V>
@@ -145,22 +149,18 @@ impl<V> ExtractDb<V>
     /// assert_eq!(db.push(Arc::new("Hello ExtractDb with custom shards!".to_string())), true);
     /// ```
     pub fn new_with_shards(shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
-        let data_store: Box<[RwLock<HashSet<u64>>]> = (0..shard_count)
-            .map(|_| RwLock::new(HashSet::new()))
-            .collect();
-        let disk_queue: Box<[RwLock<VecDeque<Arc<V>>>]> = (0..shard_count)
-            .map(|_| RwLock::new(VecDeque::new()))
-            .collect();
-        let insertion_queues: Box<[RwLock<VecDeque<Arc<V>>>]> = (0..shard_count)
-            .map(|_| RwLock::new(VecDeque::new()))
+        let shards: Box<[Shard<V>]> = (0..shard_count)
+            .map(|_| Shard {
+                data_store: RwLock::new(HashSet::new()),
+                disk_queue: RwLock::new(VecDeque::new()),
+                insertion_queue: RwLock::new(VecDeque::new())
+            })
             .collect();
 
         ExtractDb {
             shard_count,
-            data_store,
-            disk_queue,
+            shards,
             data_hasher: Xxh3DefaultBuilder::new(),
-            insertion_queue: insertion_queues,
             removal_store: ConcurrentQueue::unbounded(),
             db_directory: database_directory,
         }
@@ -192,7 +192,7 @@ impl<V> ExtractDb<V>
     }
 
     fn push_shard(&self, value: Arc<V>, shard_index: usize, hash: u64) -> bool {
-        match self.data_store[shard_index].write() {
+        match self.shards[shard_index].data_store.write() {
             Ok(mut data_shard) => {
                 if !data_shard.insert(hash) {
                     return false;
@@ -201,14 +201,14 @@ impl<V> ExtractDb<V>
             Err(_) => return false
         }
 
-        match self.disk_queue[shard_index].write() {
+        match self.shards[shard_index].disk_queue.write() {
             Ok(mut queue) => {
                 queue.push_back(Arc::clone(&value));
             },
             Err(_) => return false
         }
 
-        match self.insertion_queue[shard_index].write() {
+        match self.shards[shard_index].insertion_queue.write() {
             Ok(mut queue) => {
                 queue.push_back(value);
             },
@@ -293,8 +293,8 @@ impl<V> ExtractDb<V>
     /// ```
     pub fn internal_count(&self) -> usize {
         let mut global_shard_size = 0;
-        for data_store_shard in &*self.data_store {
-            if let Ok(data_shard) = data_store_shard.read() {
+        for shard in &self.shards {
+            if let Ok(data_shard) = shard.data_store.read() {
                 global_shard_size += data_shard.len();
             }
         }
@@ -303,8 +303,8 @@ impl<V> ExtractDb<V>
     }
 
     fn load_shards_to_accessible(&self) -> Result<(), Box<dyn Error + '_>>  {
-        for locked_queue in &self.insertion_queue {
-            if let Ok(mut write_queue) = locked_queue.write() {
+        for shard in &self.shards {
+            if let Ok(mut write_queue) = shard.insertion_queue.write() {
                 if write_queue.is_empty() {
                     continue;
                 }
@@ -352,11 +352,11 @@ impl<V> ExtractDb<V>
             fs::create_dir_all(&data_directory)?;
         }
 
-        let store_results = self.data_store
+        let store_results = self.shards
             .par_iter()
             .enumerate()
             .try_for_each(|(id, shard)| -> Result<(), Box<dyn Error + Send + Sync>> {
-                let store_shard = shard
+                let store_shard = shard.data_store
                     .read()
                     .map_err(|_| format!("Shard ({id}) failed to read lock"))?;
 
@@ -383,11 +383,11 @@ impl<V> ExtractDb<V>
             return Err(format!("Unable to save hash data_store to disk. (Error: {:#?})", store_results.err()).into())
         }
 
-        let disk_results = self.disk_queue
+        let disk_results = self.shards
             .par_iter()
             .enumerate()
             .try_for_each(|(id, shard)| -> Result<(), Box<dyn Error + Send + Sync>> {
-                let mut data_shard = shard
+                let mut data_shard = shard.disk_queue
                     .write()
                     .map_err(|_| format!("Data shard ({id}) failed to read lock"))?;
                 
@@ -539,7 +539,7 @@ impl<V> ExtractDb<V>
                     decoded_shard_data.into_par_iter().for_each(|item| {
                         let shard_index = item % self.shard_count as u64;
 
-                        if let Ok(mut data_shard) = self.data_store[shard_index as usize].write() {
+                        if let Ok(mut data_shard) = self.shards[shard_index as usize].data_store.write() {
                             if !data_shard.insert(item) {
                                 return;
                             }
@@ -549,7 +549,7 @@ impl<V> ExtractDb<V>
                     return Err("Soft error: Shard store miss-match, converting to current shard_size!".into());
                 }
 
-                if let Ok(mut data_shard) = self.data_store[shard_id].write() {
+                if let Ok(mut data_shard) = self.shards[shard_id].data_store.write() {
                     for decoded_datum in decoded_shard_data { 
                         data_shard.insert(decoded_datum);
                     }
@@ -600,7 +600,7 @@ impl<V> ExtractDb<V>
                             let hash = self.data_hasher.hash_one(&datum);
                             let new_shard_index = hash % self.shard_count as u64;
                     
-                            if let Ok(mut queue) = self.insertion_queue[new_shard_index as usize].write() {
+                            if let Ok(mut queue) = self.shards[new_shard_index as usize].insertion_queue.write() {
                                 queue.push_back(datum);
                             }
                         }
@@ -611,7 +611,7 @@ impl<V> ExtractDb<V>
                     for decoded_datum in decoded_shard_data {
                         let datum = Arc::new(decoded_datum);
 
-                        if let Ok(mut queue) = self.insertion_queue[shard_id].write() {
+                        if let Ok(mut queue) = self.shards[shard_id].insertion_queue.write() {
                             queue.push_back(datum);
                         }
                     }
