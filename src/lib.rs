@@ -1,13 +1,11 @@
 #![warn(missing_docs)]
 #![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
 use std::{fs, thread};
-use std::any::Any;
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fs::File;
-use std::hash::{BuildHasher, BuildHasherDefault, Hash};
+use std::hash::{BuildHasher, Hash};
 use std::io::{Read, Write};
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -17,9 +15,9 @@ use std::time::Duration;
 use bitcode::{Decode, Encode};
 use chrono::Utc;
 use concurrent_queue::ConcurrentQueue;
-use hashbrown::{DefaultHashBuilder, HashSet};
+use hashbrown::HashSet;
 use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, IntoParallelIterator};
-use xxhash_rust::xxh3::{Xxh3Builder, Xxh3DefaultBuilder};
+use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 #[cfg(test)]
 mod tests;
