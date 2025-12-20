@@ -27,8 +27,9 @@ fn save_state_to_disk() {
     assert!(test_data_directory.exists());
 
     assert_eq!(count_entries(&test_db_directory), 2);
-    assert_eq!(count_entries(&test_store_directory), 19);
-    assert_eq!(count_entries(&test_data_directory), 19);
+    // Shard count must be a power of 2! (Rounds up to 32 shard_count!)
+    assert_eq!(count_entries(&test_store_directory), 32);
+    assert_eq!(count_entries(&test_data_directory), 32);
 
     fs::remove_dir_all(test_db_directory).expect("Failed to delete residual test directory!?");
 }

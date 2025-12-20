@@ -86,6 +86,7 @@ pub struct ExtractDb<V>
         V: Eq + Hash + Clone + Send + Sync + Encode + for<'a> Decode<'a>
 {
     shard_count: usize,
+    shard_mask: u64,
     shards: Box<[Shard<V>]>,
 
     data_hasher: Xxh3DefaultBuilder,
@@ -150,7 +151,11 @@ impl<V> ExtractDb<V>
     ///
     /// assert_eq!(db.push(Arc::new("Hello ExtractDb with custom shards!".to_string())), true);
     /// ```
-    pub fn new_with_shards(shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
+    pub fn new_with_shards(mut shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
+        if !shard_count.is_power_of_two() {
+            shard_count = shard_count.next_power_of_two();
+        }
+
         let shards: Box<[Shard<V>]> = (0..shard_count)
             .map(|_| Shard {
                 data_store: RwLock::new(HashSet::<u64, Xxh3DefaultBuilder>::default()),
@@ -161,6 +166,7 @@ impl<V> ExtractDb<V>
 
         ExtractDb {
             shard_count,
+            shard_mask: (shard_count as u64) - 1,
             shards,
             data_hasher: Xxh3DefaultBuilder::new(),
             removal_store: ConcurrentQueue::unbounded(),
@@ -188,7 +194,7 @@ impl<V> ExtractDb<V>
     /// ```
     pub fn push(&self, value: Arc<V>) -> bool {
         let hash = self.data_hasher.hash_one(&value);
-        let shard_index = hash % self.shard_count as u64;
+        let shard_index = hash & self.shard_mask;
 
         self.push_shard(value, shard_index as usize, hash)
     }
@@ -600,7 +606,7 @@ impl<V> ExtractDb<V>
                             let datum = Arc::new(decoded_datum);
                     
                             let hash = self.data_hasher.hash_one(&datum);
-                            let new_shard_index = hash % self.shard_count as u64;
+                            let new_shard_index = hash & self.shard_mask;
                     
                             if let Ok(mut queue) = self.shards[new_shard_index as usize].insertion_queue.write() {
                                 queue.push_back(datum);
