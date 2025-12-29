@@ -111,6 +111,7 @@ struct Shard<V>
 pub struct ExtractConfig {
     shard_count: usize,
     optimistic_read: bool,
+    drain_size: usize,
     database_directory: Option<PathBuf>
 }
 
@@ -119,6 +120,7 @@ impl Default for ExtractConfig {
         Self {
             shard_count: 16,
             optimistic_read: false,
+            drain_size: 100_000,
             database_directory: None
         }
     }
@@ -136,6 +138,12 @@ impl ExtractConfig {
     /// Enable only if environment is prone to high input similarity chances.
     pub fn optimistic_read(mut self, state: bool) -> Self {
         self.optimistic_read = state;
+        self
+    }
+
+    /// Amount of items drained into the fetch `buffer`, lowers runtime memory duplication at the expense of more intermittent reads.
+    pub fn drain_size(mut self, size: usize) -> Self {
+        self.drain_size = size;
         self
     }
 
@@ -345,15 +353,21 @@ impl<V> ExtractDb<V>
 
     fn load_shards_to_accessible(&self) -> Result<(), Box<dyn Error + '_>>  {
         for shard in &self.shards {
-            if let Ok(mut write_queue) = shard.insertion_queue.write() {
-                if write_queue.is_empty() {
-                    continue;
-                }
-
-                while let Some(item) = write_queue.pop() {
-                    if self.removal_store.push(item).is_err() {
-                        return Err("Failed to load sharded data into removal_store queue".into());
+            let shard_drain: Vec<Arc<V>> = match shard.insertion_queue.write() {
+                Ok(mut write_queue ) => {
+                    if write_queue.is_empty() {
+                        continue;
                     }
+                    
+                    let drain_amount = usize::min(write_queue.len(), self.config.drain_size);
+                    write_queue.drain(..drain_amount).collect()
+                },
+                Err(_) => continue
+            };
+
+            for item in shard_drain {
+                if self.removal_store.push(item).is_err() {
+                    return Err("Failed to load sharded data into removal_store queue".into());
                 }
             }
         }
