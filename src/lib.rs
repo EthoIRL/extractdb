@@ -33,9 +33,12 @@ mod tests;
 /// ```no_run
 /// use std::path::PathBuf;
 /// use std::sync::Arc;
-/// use extractdb::ExtractDb;
+/// use extractdb::{ExtractConfig, ExtractDb};
 ///
-/// let db: ExtractDb<i32> = ExtractDb::new(Some(PathBuf::from("/home/user/database_name")));
+/// let config = ExtractConfig::default()
+///     .database_directory(Some(PathBuf::from("/home/user/database_name")));
+/// 
+/// let db: ExtractDb<i32> = ExtractDb::new(config);
 ///
 /// db.load_from_disk(true).unwrap();
 ///
@@ -53,9 +56,12 @@ mod tests;
 /// use std::sync::Arc;
 /// use std::sync::atomic::{AtomicBool, Ordering};
 /// use std::time::Duration;
-/// use extractdb::{CheckpointSettings, ExtractDb};
+/// use extractdb::{CheckpointSettings, ExtractConfig, ExtractDb};
 ///
-/// let db: Arc<ExtractDb<i32>> = Arc::new(ExtractDb::new(Some(PathBuf::from("/home/user/database_name"))));
+/// let config = ExtractConfig::default()
+///     .database_directory(Some(PathBuf::from("/home/user/database_name")));
+/// 
+/// let db: Arc<ExtractDb<i32>> = Arc::new(ExtractDb::new(config));
 ///
 /// db.load_from_disk(true).unwrap();
 ///
@@ -164,7 +170,7 @@ impl<V> ExtractDb<V>
     /// use std::sync::Arc;
     ///
     /// // In-memory only example, set a path for save/loading.
-    /// let db: ExtractDb<String> = ExtractDb::new(None);
+    /// let db: ExtractDb<String> = ExtractDb::default();
     ///
     /// assert_eq!(db.push(Arc::new("Hello ExtractDb!".to_string())), true);
     /// ```
@@ -202,7 +208,7 @@ impl<V> ExtractDb<V>
     /// use extractdb::ExtractDb;
     /// use std::sync::Arc;
     ///
-    /// let db: ExtractDb<i32> = ExtractDb::new(None);
+    /// let db: ExtractDb<i32> = ExtractDb::default();
     ///
     /// assert_eq!(db.push(Arc::new(100)), true);
     /// assert_eq!(db.push(Arc::new(100)), false);
@@ -268,7 +274,7 @@ impl<V> ExtractDb<V>
     /// use extractdb::ExtractDb;
     /// use std::sync::Arc;
     ///
-    /// let db: ExtractDb<String> = ExtractDb::new(None);
+    /// let db: ExtractDb<String> = ExtractDb::default();
     ///
     /// assert_eq!(db.push(Arc::new("hello world".to_string())), true);
     /// assert_eq!(db.fetch_next().unwrap(), Arc::new("hello world".to_string()));
@@ -296,7 +302,7 @@ impl<V> ExtractDb<V>
     /// use extractdb::ExtractDb;
     /// use std::sync::Arc;
     ///
-    /// let db: ExtractDb<u8> = ExtractDb::new(None);
+    /// let db: ExtractDb<u8> = ExtractDb::default();
     ///
     /// assert_eq!(db.push(Arc::new(20)), true);
     /// assert_eq!(db.fetch_count(), 0); // No data is currently loaded
@@ -319,7 +325,7 @@ impl<V> ExtractDb<V>
     /// use extractdb::ExtractDb;
     /// use std::sync::Arc;
     ///
-    /// let db: ExtractDb<u8> = ExtractDb::new(None);
+    /// let db: ExtractDb<u8> = ExtractDb::default();
     ///
     /// for i in 0..128 {
     ///     assert_eq!(db.push(Arc::new(i)), true);
@@ -693,7 +699,7 @@ impl<V> ExtractDb<V>
     /// use std::sync::atomic::{AtomicBool, Ordering};
     /// use extractdb::{CheckpointSettings, ExtractDb};
     ///
-    /// let db: Arc<ExtractDb<u8>> = Arc::new(ExtractDb::new(None));
+    /// let db: Arc<ExtractDb<u8>> = Arc::new(ExtractDb::default());
     ///
     /// let shutdown_flag = Arc::new(AtomicBool::new(false));
     /// let mut save_settings = CheckpointSettings::new(shutdown_flag.clone());
