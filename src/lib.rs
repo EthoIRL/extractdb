@@ -104,6 +104,7 @@ struct Shard<V>
 #[derive(Clone, Debug)]
 pub struct ExtractConfig {
     shard_count: usize,
+    optimistic_read: bool,
     database_directory: Option<PathBuf>
 }
 
@@ -111,6 +112,7 @@ impl Default for ExtractConfig {
     fn default() -> Self {
         Self {
             shard_count: 16,
+            optimistic_read: false,
             database_directory: None
         }
     }
@@ -121,6 +123,13 @@ impl ExtractConfig {
     /// Must be a power of 2 (2, 4, 8, 16, 32, ...), if not set correctly auto-rounds to nearest power of 2.
     pub fn shard_count(mut self, count: usize) -> Self {
         self.shard_count = count;
+        self
+    }
+
+    /// Performs an optimistic hash check (Fail-fast) returning early if data is already present in the database.
+    /// Enable only if environment is prone to high input similarity chances.
+    pub fn optimistic_read(mut self, state: bool) -> Self {
+        self.optimistic_read = state;
         self
     }
 
@@ -207,6 +216,17 @@ impl<V> ExtractDb<V>
     }
 
     fn push_shard(&self, value: Arc<V>, shard_index: usize, hash: u64) -> bool {
+        if self.config.optimistic_read {
+            match self.shards[shard_index].data_store.read() {
+                Ok(data_shard) => {
+                    if data_shard.contains(&hash) {
+                        return false;
+                    }
+                },
+                Err(_) => return false
+            }
+        }
+
         match self.shards[shard_index].data_store.write() {
             Ok(mut data_shard) => {
                 if !data_shard.insert(hash) {
