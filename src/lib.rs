@@ -21,8 +21,6 @@ use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 #[cfg(test)]
 mod tests;
 
-const SHARD_COUNT: usize = 16;
-
 /// [`ExtractDb`] is a thread-safe, in-memory hash store supporting concurrent fetches and writes.
 ///
 /// [`ExtractDb`] only supplies a push & fetch interface where both are ``&self``.
@@ -82,14 +80,12 @@ pub struct ExtractDb<V>
     where
         V: Eq + Hash + Clone + Send + Sync + Encode + for<'a> Decode<'a>
 {
-    shard_count: usize,
+    config: ExtractConfig,
     shard_mask: u64,
     shards: Box<[Shard<V>]>,
 
     data_hasher: Xxh3DefaultBuilder,
-    removal_store: ConcurrentQueue<Arc<V>>,
-
-    db_directory: Option<PathBuf>,
+    removal_store: ConcurrentQueue<Arc<V>>
 }
 
 #[repr(align(128))]
@@ -100,12 +96,47 @@ struct Shard<V>
     insertion_queue: RwLock<Vec<Arc<V>>>,
 }
 
+/// [`ExtractConfig`] Configuration structure for [`ExtractDb`]
+/// 
+/// `ExtractConfig` can be used to define shard count, optimistic reading behavior, draining size, and disk saving location.  
+/// 
+/// Use this to initialize a customized instance of [`ExtractDb`]
+#[derive(Clone, Debug)]
+pub struct ExtractConfig {
+    shard_count: usize,
+    database_directory: Option<PathBuf>
+}
+
+impl Default for ExtractConfig {
+    fn default() -> Self {
+        Self {
+            shard_count: 16,
+            database_directory: None
+        }
+    }
+}
+
+impl ExtractConfig {
+    /// Internal sharding count; Use similar amounts to logical cores for best performance.
+    /// Must be a power of 2 (2, 4, 8, 16, 32, ...), if not set correctly auto-rounds to nearest power of 2.
+    pub fn shard_count(mut self, count: usize) -> Self {
+        self.shard_count = count;
+        self
+    }
+
+    /// Filesystem location pointer, allows saving of data to disk. This is **optional!**
+    pub fn database_directory(mut self, directory: Option<PathBuf>) -> Self {
+        self.database_directory = directory;
+        self
+    }
+}
+
 impl<V> Default for ExtractDb<V>
     where
         V: Eq + Hash + Clone + Send + Sync + Encode + for<'a> Decode<'a>
 {
     fn default() -> Self {
-        Self::new(None)
+        Self::new(ExtractConfig::default())
     }
 }
 
@@ -128,32 +159,12 @@ impl<V> ExtractDb<V>
     ///
     /// assert_eq!(db.push(Arc::new("Hello ExtractDb!".to_string())), true);
     /// ```
-    pub fn new(database_directory: Option<PathBuf>) -> ExtractDb<V> {
-        Self::new_with_shards(SHARD_COUNT, database_directory)
-    }
-
-    /// Creates a new [`ExtractDb`] with a specific internal sharding amount
-    ///
-    /// # Arguments
-    /// `shard_count`: Shards to be used internally. Think more shards = more concurrency, vice versa.
-    ///
-    /// `database_directory`: Allows saving of data to disk. This is **optional**!
-    ///
-    /// # Examples
-    /// ```rust
-    /// use extractdb::ExtractDb;
-    /// use std::sync::Arc;
-    ///
-    /// let db: ExtractDb<String> = ExtractDb::new_with_shards(32, None);
-    ///
-    /// assert_eq!(db.push(Arc::new("Hello ExtractDb with custom shards!".to_string())), true);
-    /// ```
-    pub fn new_with_shards(mut shard_count: usize, database_directory: Option<PathBuf>) -> ExtractDb<V> {
-        if !shard_count.is_power_of_two() {
-            shard_count = shard_count.next_power_of_two();
+    pub fn new(mut config: ExtractConfig) -> ExtractDb<V> {
+        if !config.shard_count.is_power_of_two() {
+            config.shard_count = config.shard_count.next_power_of_two();
         }
 
-        let shards: Box<[Shard<V>]> = (0..shard_count)
+        let shards: Box<[Shard<V>]> = (0..config.shard_count)
             .map(|_| Shard {
                 data_store: RwLock::new(HashSet::<u64, Xxh3DefaultBuilder>::default()),
                 disk_queue: RwLock::new(Vec::new()),
@@ -162,12 +173,11 @@ impl<V> ExtractDb<V>
             .collect();
 
         ExtractDb {
-            shard_count,
-            shard_mask: (shard_count as u64) - 1,
+            shard_mask: (config.shard_count as u64) - 1,
+            config,
             shards,
             data_hasher: Xxh3DefaultBuilder::new(),
             removal_store: ConcurrentQueue::unbounded(),
-            db_directory: database_directory,
         }
     }
 
@@ -338,7 +348,7 @@ impl<V> ExtractDb<V>
     /// # Errors
     /// [`Box<dyn Error>`] may return if database directory is not set or if saving fails.
     pub fn save_to_disk(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let Some(database_directory) = &self.db_directory else {
+        let Some(database_directory) = &self.config.database_directory else {
             return Err("No database directory is set. Cannot save to disk without a valid path set!".into())
         };
 
@@ -440,7 +450,7 @@ impl<V> ExtractDb<V>
     /// [`Box<dyn Error + Send + Sync>`] may return if any form of corruption occurs, or if a shard size changes.
     /// **Missing any store files will be considered fully corrupted. While data files will be recovered to the best of its ability without an error.**
     pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let Some(database_directory) = &self.db_directory else {
+        let Some(database_directory) = &self.config.database_directory else {
             return Err("No database directory is set. Cannot load from disk without a valid path set!".into())
         };
 
@@ -469,7 +479,7 @@ impl<V> ExtractDb<V>
 
         let shard_mismatch: bool = {
             let store_mismatch = match fs::read_dir(store_directory) {
-                Ok(files) => files.count() != self.shard_count,
+                Ok(files) => files.count() != self.config.shard_count,
                 Err(_) => true
             };
 
@@ -494,7 +504,7 @@ impl<V> ExtractDb<V>
                                 Err(_) => return true
                             };
 
-                            if shard_id >= self.shard_count {
+                            if shard_id >= self.config.shard_count {
                                 return true
                             }
                             
@@ -542,7 +552,7 @@ impl<V> ExtractDb<V>
 
                 if shard_mismatch {
                     decoded_shard_data.into_par_iter().for_each(|item| {
-                        let shard_index = item % self.shard_count as u64;
+                        let shard_index = item % self.config.shard_count as u64;
 
                         if let Ok(mut data_shard) = self.shards[shard_index as usize].data_store.write() {
                             if !data_shard.insert(item) {
