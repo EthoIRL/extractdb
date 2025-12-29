@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::{env, fs, panic};
-use crate::ExtractDb;
+use crate::{ExtractConfig, ExtractDb};
 
 /// Checks if state is correctly written to disk from a ExtractDb<i32>
 #[test]
@@ -12,7 +12,13 @@ fn save_state_to_disk() {
         fs::remove_dir_all(test_db_directory.clone()).expect("Failed to delete residual test directory!?");
     }
 
-    let database: ExtractDb<i32> = ExtractDb::new_with_shards(19, Some(test_db_directory.clone()));
+    let config = ExtractConfig::default()
+        .shard_count(19)
+        .database_directory(Some(test_db_directory.clone()));
+    
+    let database: ExtractDb<i32> = ExtractDb::new(config);
+    
+    assert_eq!(database.config.shard_count, 32);
 
     for i in 0..10000 {
         assert_eq!(database.push(Arc::new(i)), true);
@@ -51,7 +57,10 @@ fn load_state_from_disk() {
         fs::remove_dir_all(test_db_directory.clone()).expect("Failed to delete residual test directory!?");
     }
 
-    let database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
+    let config = ExtractConfig::default()
+        .database_directory(Some(test_db_directory.clone()));
+    
+    let database: ExtractDb<String> = ExtractDb::new(config.clone());
 
     for i in 0..10000 {
         assert_eq!(database.push(Arc::new(format!("Id: {}", i))), true);
@@ -61,7 +70,7 @@ fn load_state_from_disk() {
 
     drop(database); // Done to conserve memory during testing
 
-    let new_database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
+    let new_database: ExtractDb<String> = ExtractDb::new(config);
     assert_eq!(new_database.internal_count(), 0);
     assert_eq!(new_database.fetch_count(), 0);
 
@@ -86,7 +95,10 @@ fn load_corrupted_state_from_disk() {
         fs::remove_dir_all(test_db_directory.clone()).expect("Failed to delete residual test directory!?");
     }
 
-    let database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
+    let config = ExtractConfig::default()
+        .database_directory(Some(test_db_directory.clone()));
+    
+    let database: ExtractDb<String> = ExtractDb::new(config.clone());
 
     for i in 0..10000 {
         assert_eq!(database.push(Arc::new(format!("Id: {}", i))), true);
@@ -111,7 +123,7 @@ fn load_corrupted_state_from_disk() {
 
     assert_eq!(deleted_files, 4 + 1);
 
-    let new_database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
+    let new_database: ExtractDb<String> = ExtractDb::new(config);
     assert_eq!(new_database.internal_count(), 0);
     assert_eq!(new_database.fetch_count(), 0);
 
@@ -133,7 +145,10 @@ fn load_shard_mismatch_from_disk() {
         fs::remove_dir_all(test_db_directory.clone()).expect("Failed to delete residual test directory!?");
     }
 
-    let database: ExtractDb<u64> = ExtractDb::new(Some(test_db_directory.clone()));
+    let config = ExtractConfig::default()
+        .database_directory(Some(test_db_directory.clone()));
+    
+    let database: ExtractDb<u64> = ExtractDb::new(config.clone());
 
     for i in 0..10000 {
         assert_eq!(database.push(Arc::new(i)), true);
@@ -142,7 +157,11 @@ fn load_shard_mismatch_from_disk() {
     assert!(database.save_to_disk().is_ok());
     drop(database); // Done to conserve memory during testing
 
-    let new_database: ExtractDb<u64> = ExtractDb::new_with_shards(48, Some(test_db_directory.clone()));
+    let new_config = ExtractConfig::default()
+        .shard_count(48)
+        .database_directory(Some(test_db_directory.clone()));
+    
+    let new_database: ExtractDb<u64> = ExtractDb::new(new_config);
     assert_eq!(new_database.internal_count(), 0);
     assert_eq!(new_database.fetch_count(), 0);
 
@@ -164,7 +183,10 @@ fn load_mismatch_type_from_disk() {
         fs::remove_dir_all(test_db_directory.clone()).expect("Failed to delete residual test directory!?");
     }
 
-    let database: ExtractDb<u64> = ExtractDb::new(Some(test_db_directory.clone()));
+    let config = ExtractConfig::default()
+        .database_directory(Some(test_db_directory.clone()));
+    
+    let database: ExtractDb<u64> = ExtractDb::new(config.clone());
 
     for i in 0..10000 {
         assert_eq!(database.push(Arc::new(i)), true);
@@ -173,7 +195,7 @@ fn load_mismatch_type_from_disk() {
     assert!(database.save_to_disk().is_ok());
     drop(database); // Done to conserve memory during testing
 
-    let new_database: ExtractDb<String> = ExtractDb::new(Some(test_db_directory.clone()));
+    let new_database: ExtractDb<String> = ExtractDb::new(config);
 
     let panic_load = panic::catch_unwind(|| new_database.load_from_disk(false));
     assert!(panic_load.is_ok());

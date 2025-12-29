@@ -9,7 +9,7 @@ use crate::ExtractDb;
 /// This test should always return (thread_count * insertion_count) -> ExtractDb::internal_count()
 #[test]
 fn push_multi_thread() {
-    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(None));
+    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::default());
     let thread_count = 4;
     let insertion_count = 128;
 

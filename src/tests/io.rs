@@ -12,7 +12,7 @@ use crate::ExtractDb;
 /// This test should always return 1 -> ExtractDb::internal_count()
 #[test]
 fn push() {
-    let db: ExtractDb<i32> = ExtractDb::new(None);
+    let db: ExtractDb<i32> = ExtractDb::default();
 
     db.push(Arc::new(100));
 
@@ -26,7 +26,7 @@ fn push() {
 /// This test should always return 128 -> ExtractDb::internal_count()
 #[test]
 fn push_multiple() {
-    let db: ExtractDb<i32> = ExtractDb::new(None);
+    let db: ExtractDb<i32> = ExtractDb::default();
 
     for count in 0..128 {
         db.push(Arc::new(count));
@@ -43,7 +43,7 @@ fn push_multiple() {
 /// This test should always return 1 -> ExtractDb::internal_count()
 #[test]
 fn push_collided() {
-    let db: ExtractDb<i32> = ExtractDb::new(None);
+    let db: ExtractDb<i32> = ExtractDb::default();
 
     db.push(Arc::new(10));
     db.push(Arc::new(10));
@@ -93,7 +93,7 @@ enum Status {
 /// confidence -> 100
 #[test]
 fn push_structure() {
-    let database: ExtractDb<TestStructure> = ExtractDb::new(None);
+    let database: ExtractDb<TestStructure> = ExtractDb::default();
 
     let id = 1219;
     let duration = Some(Duration::from_nanos(1));
@@ -151,7 +151,7 @@ fn push_structure() {
 /// This test should always return 0 -> ExtractDb::count()
 #[test]
 fn count_empty_store() {
-    let db: ExtractDb<i32> = ExtractDb::new(None);
+    let db: ExtractDb<i32> = ExtractDb::default();
 
     db.push(Arc::new(0));
     db.push(Arc::new(10));
@@ -169,7 +169,7 @@ fn count_empty_store() {
 /// This test should always return 4 -> ExtractDb::count()
 #[test]
 fn count_loaded_store() {
-    let db: ExtractDb<i32> = ExtractDb::new(None);
+    let db: ExtractDb<i32> = ExtractDb::default();
 
     db.push(Arc::new(0));
     db.push(Arc::new(10));
@@ -188,7 +188,7 @@ fn count_loaded_store() {
 /// This test should always return True -> ExtractDb::fetch_next().is_ok()
 #[test]
 fn fetch_data() {
-    let db: ExtractDb<i32> = ExtractDb::new(None);
+    let db: ExtractDb<i32> = ExtractDb::default();
 
     db.push(Arc::new(0));
     db.push(Arc::new(1000));
@@ -203,7 +203,7 @@ fn fetch_data() {
 /// This test should always return True -> ExtractDb::fetch_next().is_ok()
 #[test]
 fn fetch_data_multiple() {
-    let database: ExtractDb<i64> = ExtractDb::new(None);
+    let database: ExtractDb<i64> = ExtractDb::default();
 
     for i in 0..128 {
         database.push(Arc::new(i));
@@ -221,7 +221,7 @@ fn fetch_data_multiple() {
 /// This test should always return True -> ExtractDb::fetch_next().is_err()
 #[test]
 fn fetch_data_empty() {
-    let database: ExtractDb<i64> = ExtractDb::new(None);
+    let database: ExtractDb<i64> = ExtractDb::default();
 
     assert!(database.fetch_next().is_err());
 }
@@ -229,7 +229,7 @@ fn fetch_data_empty() {
 /// Checks if data is fetched and returned twice from a ExtractDb<i32>
 #[test]
 fn duplicate_fetch() {
-    let database: ExtractDb<i64> = ExtractDb::new(None);
+    let database: ExtractDb<i64> = ExtractDb::default();
 
     assert_eq!(database.push(Arc::new(-1)), true);
     assert_eq!(database.fetch_count(), 0);
