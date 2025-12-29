@@ -56,7 +56,7 @@ use extractdb::ExtractDb;
 use std::sync::Arc;
 
 fn main() {
-    let database: ExtractDb<i32> = ExtractDb::new(None);
+    let database: ExtractDb<i32> = ExtractDb::default();
 
     database.push(Arc::new(100));
 
@@ -79,7 +79,7 @@ use extractdb::ExtractDb;
 use std::thread;
 
 fn main() {
-    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(None));
+    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::default());
 
     for thread_id in 0..8 {
         let local_database = Arc::clone(&database);
@@ -101,10 +101,13 @@ fn main() {
 ```rust
 use std::path::PathBuf;
 use std::sync::Arc;
-use extractdb::ExtractDb;
+use extractdb::{ExtractConfig, ExtractDb};
 
 fn main() {
-    let database: ExtractDb<String> = ExtractDb::new(Some(PathBuf::from("./test_db")));
+    let config = ExtractConfig::default()
+        .database_directory(Some(PathBuf::from("./test_db")));
+
+    let database: ExtractDb<String> = ExtractDb::new(config);
 
     // `True`: Load all items back into `fetch_next` queue
     database.load_from_disk(true).unwrap();
@@ -120,10 +123,13 @@ fn main() {
 use std::sync::Arc;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use extractdb::{CheckpointSettings, ExtractDb};
+use extractdb::{CheckpointSettings, ExtractConfig, ExtractDb};
 
 fn main() {
-    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(Some(PathBuf::from("./test_db_2"))));
+    let config = ExtractConfig::default()
+        .database_directory(Some(PathBuf::from("./test_db_2")));
+
+    let database: Arc<ExtractDb<String>> = Arc::new(ExtractDb::new(config));
 
     // `True`: Load all items back into `fetch_next` queue
     database.load_from_disk(true).unwrap();
