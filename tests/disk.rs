@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::{env, fs, panic};
-use crate::{ExtractConfig, ExtractDb};
+use extractdb::{ExtractConfig, ExtractDb};
 
 /// Checks if state is correctly written to disk from a ExtractDb<i32>
 #[test]
@@ -16,9 +16,7 @@ fn save_state_to_disk() {
         .shard_count(19)
         .database_directory(Some(test_db_directory.clone()));
     
-    let database: ExtractDb<i32> = ExtractDb::new(config);
-    
-    assert_eq!(database.config.shard_count, 32);
+    let database: ExtractDb<i32> = ExtractDb::new(config);    
 
     for i in 0..10000 {
         assert_eq!(database.push(Arc::new(i)), true);

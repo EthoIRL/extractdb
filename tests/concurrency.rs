@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::thread;
-use crate::ExtractDb;
+use extractdb::ExtractDb;
 
 /// Inserts unique values in a multithreaded environment into a ExtractDb<i32>
 ///

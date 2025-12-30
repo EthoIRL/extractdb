@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use bitcode::{Decode, Encode};
-use crate::ExtractDb;
+use extractdb::ExtractDb;
 
 /// Attempts to insert a single value map into the ExtractDb<i32>
 ///

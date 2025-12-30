@@ -18,9 +18,6 @@ use hashbrown::HashSet;
 use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, IntoParallelIterator};
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
-#[cfg(test)]
-mod tests;
-
 /// [`ExtractDb`] is a thread-safe, in-memory hash store supporting concurrent fetches and writes.
 ///
 /// [`ExtractDb`] only supplies a push & fetch interface where both are ``&self``.
