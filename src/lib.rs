@@ -3,7 +3,7 @@
 use std::{fs, thread};
 use std::error::Error;
 use std::fs::File;
-use std::hash::{BuildHasher, Hash};
+use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -97,9 +97,17 @@ pub struct ExtractDb<V>
 #[repr(align(128))]
 struct Shard<V>
 {
-    data_store: RwLock<HashSet<u64, Xxh3DefaultBuilder>>,
+    data_store: RwLock<HashSet<u64, BuildHasherDefault<IdentityHasher>>>,
     disk_queue: RwLock<Vec<Arc<V>>>,
     insertion_queue: RwLock<Vec<Arc<V>>>,
+}
+
+#[derive(Default)]
+struct IdentityHasher(u64);
+impl Hasher for IdentityHasher {
+    fn finish(&self) -> u64 { self.0 }
+    fn write(&mut self, _: &[u8]) { unimplemented!() }
+    fn write_u64(&mut self, i: u64) { self.0 = i; }
 }
 
 /// [`ExtractConfig`] Configuration structure for [`ExtractDb`]
@@ -189,7 +197,7 @@ impl<V> ExtractDb<V>
 
         let shards: Box<[Shard<V>]> = (0..config.shard_count)
             .map(|_| Shard {
-                data_store: RwLock::new(HashSet::<u64, Xxh3DefaultBuilder>::default()),
+                data_store: RwLock::new(HashSet::<u64, BuildHasherDefault<IdentityHasher>>::default()),
                 disk_queue: RwLock::new(Vec::new()),
                 insertion_queue: RwLock::new(Vec::new())
             })
