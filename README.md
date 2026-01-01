@@ -10,6 +10,7 @@ Specific "item" removal is not supported in favor of a fetching type system and 
 - [Guarantees](#guarantees)
 - [Trade-offs](#trade-offs)
 - [Use scenarios](#use-scenarios)
+- [Benchmarking](BENCHMARK.md)
 - [Installation](#installation)
 - [Examples](#examples)
   - Basics
