@@ -84,7 +84,7 @@ mod fetch {
     use extractdb::{ExtractConfig, ExtractDb};
     use crate::SHARDS;
 
-    #[divan::bench(args = SHARDS)]
+    #[divan::bench(args = SHARDS, threads = &[0, 1])]
     fn extraction(bencher: divan::Bencher, shard_count: usize) {
         let config = ExtractConfig::default()
             .shard_count(shard_count);
