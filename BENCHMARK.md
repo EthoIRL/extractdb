@@ -11,6 +11,19 @@ All tests unless specified are ran under these specs:
    - L3: 96 MB
  - Memory: 64 GB DDR4 @ 3200mhz (CL18-22-22-42)
 
+## Suite (module layout)
+- io
+  - fetch
+    - extraction
+      - Performs ExtractDb::fetch_next() as fast as it can, with valid items in the database.
+    - insertion_extraction
+      - Performs a ExtractDb::push(item) and then attempts to ExtractDb::fetch_next() as fast as it can. 
+  - push
+    - non_colliding
+      - Performs a ExtractDb::push(item) where item is a guaranteed unique occurrence.
+    - colliding
+      - Performs a ExtractDb::push(item) where item is a constant.
+
 ## 358c0fd (16 Threads)
 ```
 Timer precision: 20 ns
