@@ -475,8 +475,6 @@ impl<V> ExtractDb<V>
                 Ok(())
             });
 
-        store_results?;
-
         let disk_results = self.shards
             .par_iter()
             .enumerate()
@@ -511,6 +509,7 @@ impl<V> ExtractDb<V>
                 Ok(())
             });
 
+        store_results?;
         disk_results?;
 
         Ok(())
