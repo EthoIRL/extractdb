@@ -324,4 +324,12 @@ impl<V> ExtractDb<V>
 
         Ok(())
     }
+    
+    /// Exposes the internal config used to create the [`ExtractDb`] database.
+    /// 
+    /// # Returns
+    /// [`&ExtractConfig`] reference of internal config.
+    pub fn get_config(&self) -> &ExtractConfig {
+        &self.config
+    }
 }
