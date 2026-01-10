@@ -19,6 +19,7 @@ bitcode = "0.6.8"
 rayon = "1.11.0"
 chrono = "0.4.42"
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+thiserror = "2.0.17"
 
 [dev-dependencies]
 divan = "0.1.21"

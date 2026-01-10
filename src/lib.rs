@@ -13,9 +13,10 @@ use std::time::Duration;
 
 use bitcode::{Decode, Encode};
 use chrono::Utc;
-use concurrent_queue::ConcurrentQueue;
+use concurrent_queue::{ConcurrentQueue, PopError, PushError};
 use hashbrown::HashSet;
 use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, IntoParallelIterator};
+use thiserror::Error;
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 /// [`ExtractDb`] is a thread-safe, in-memory hash store supporting concurrent fetches and writes.
@@ -168,6 +169,18 @@ impl<V> Default for ExtractDb<V>
     }
 }
 
+#[derive(Error, Debug)]
+pub enum FetchError<V>
+{
+    /// Failed to load shard internal data into removal store queue 
+    #[error(transparent)]
+    Push(#[from] PushError<V>),
+    
+    /// Failed to pop data from internal removal_store
+    #[error(transparent)]
+    Pop(#[from] PopError),
+}
+
 impl<V> ExtractDb<V>
     where
         V: Eq + Hash + Clone + Send + Sync + Encode + for<'a> Decode<'a>
@@ -294,15 +307,13 @@ impl<V> ExtractDb<V>
     /// assert_eq!(db.internal_count(), 1);
     /// assert_eq!(db.fetch_count(), 0);
     /// ```
-    pub fn fetch_next(&self) -> Result<Arc<V>, Box<dyn Error + '_>> {
+    pub fn fetch_next(&self) -> Result<Arc<V>, FetchError<Arc<V>>> {
         if self.removal_store.is_empty() {
             self.load_shards_to_accessible()?;
         }
 
-        match self.removal_store.pop() {
-            Ok(value) => Ok(value),
-            Err(_) => Err("Failed to pop data from removal_store".into())
-        }
+        self.removal_store.pop()
+            .map_err(|err| err.into())
     }
 
     /// Get the current count of the `fetch_next` mutable queue
@@ -356,7 +367,7 @@ impl<V> ExtractDb<V>
         global_shard_size
     }
 
-    fn load_shards_to_accessible(&self) -> Result<(), Box<dyn Error + '_>>  {
+    fn load_shards_to_accessible(&self) -> Result<(), PushError<Arc<V>>>  {
         for shard in &self.shards {
             let shard_drain: Vec<Arc<V>> = match shard.insertion_queue.write() {
                 Ok(mut write_queue ) => {
@@ -371,9 +382,7 @@ impl<V> ExtractDb<V>
             };
 
             for item in shard_drain {
-                if self.removal_store.push(item).is_err() {
-                    return Err("Failed to load sharded data into removal_store queue".into());
-                }
+                self.removal_store.push(item)?
             }
         }
 
