@@ -1,7 +1,6 @@
 #![warn(missing_docs)]
 #![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
 use std::{fs, thread};
-use std::error::Error;
 use std::fs::File;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::io::{Read, Write};
