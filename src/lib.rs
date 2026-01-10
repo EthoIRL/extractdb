@@ -368,7 +368,7 @@ impl<V> ExtractDb<V>
     /// `Arc<V>` A reference of the internal item
     ///
     /// # Errors
-    /// [`Box<dyn Error + '_>`] may return if queue is empty or if loading has a critical error
+    /// [`FetchError<Arc<V>>`] may return if queue is empty or if loading has a critical error. See [`FetchError`] doc for more info.
     ///
     /// # Examples
     /// ```rust
@@ -475,7 +475,7 @@ impl<V> ExtractDb<V>
     ///     This is appended to disk every save (0-XXXXXXXXXX..(SHARD_COUNT-1)-XXXXXXXXXX). Files are formatted with UTC Timestamp seconds to avoid collision.
     ///
     /// # Errors
-    /// [`Box<dyn Error>`] may return if database directory is not set or if saving fails.
+    /// [`SaveError`] may return if database directory is not set or if saving fails. See [`SaveError`] doc for more info.
     pub fn save_to_disk(&self) -> Result<(), SaveError> {
         let Some(database_directory) = &self.config.database_directory else {
             return Err(SaveError::NoDirectory)
@@ -571,7 +571,8 @@ impl<V> ExtractDb<V>
     /// `re_enqueue`: Loads all data back into fetch queue.
     ///
     /// # Errors
-    /// [`Box<dyn Error + Send + Sync>`] may return if any form of corruption occurs, or if a shard size changes.
+    /// 
+    /// [`LoadError] may return if any form of corruption occurs, or if a shard size changes. See [`LoadError`] doc for more info.
     /// **Missing any store files will be considered fully corrupted. While data files will be recovered to the best of its ability without an error.**
     pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), LoadError> {
         let Some(database_directory) = &self.config.database_directory else {
