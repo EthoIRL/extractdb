@@ -1,4 +1,7 @@
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
 /// [`ExtractConfig`] Configuration structure for [`ExtractDb`]
 ///
@@ -49,5 +52,51 @@ impl ExtractConfig {
     pub fn database_directory(mut self, directory: Option<PathBuf>) -> Self {
         self.database_directory = directory;
         self
+    }
+}
+
+/// Configuration settings for the provided [`ExtractDb::background_checkpoints`].
+///
+/// # Examples
+/// ```
+/// use std::sync::Arc;
+/// use std::sync::atomic::{AtomicBool, Ordering};
+/// use std::time::Duration;
+/// use extractdb::{CheckpointSettings, ExtractDb};
+///
+/// let shutdown_flag = Arc::new(AtomicBool::new(false));
+/// let mut save_settings = CheckpointSettings::new(shutdown_flag.clone());
+///
+/// save_settings.minimum_changes = 30;
+///
+/// // Checks every 5 seconds for >=30 changes.
+/// save_settings.check_delay = Duration::from_secs(5);
+///
+/// // Gracefully shutdown a background thread
+/// shutdown_flag.store(true, Ordering::Relaxed);
+/// ```
+pub struct CheckpointSettings {
+    /// Interval at which the `internal_count` is checked
+    ///
+    /// e.g. Check the number of pushes every X seconds.
+    pub check_delay: Duration,
+
+    /// Minimum number of changes from the last disk write needed for a new disk write.
+    ///
+    /// e.g. Write to disk after 200 push insertions.
+    pub minimum_changes: usize,
+
+    /// A flag to safely shut down the internal watcher thread. Use this to gracefully shutdown & save state
+    pub shutdown_flag: Arc<AtomicBool>
+}
+
+impl CheckpointSettings {
+    /// Generic default settings for auto-saving in [`ExtractDb::background_checkpoints`].
+    pub fn new(shutdown_flag: Arc<AtomicBool>) -> Self {
+        CheckpointSettings {
+            check_delay: Duration::from_secs(30),
+            minimum_changes: 1000,
+            shutdown_flag
+        }
     }
 }
