@@ -181,6 +181,33 @@ pub enum FetchError<V>
     Pop(#[from] PopError),
 }
 
+#[derive(Error, Debug)]
+pub enum SaveError {
+    /// Failed to lock data_store or disk_queue from shard 
+    #[error("Failed to read lock [Shard {0}]")]
+    ShardLock(usize),
+    
+    /// Failed to create or truncate preexisting file from shard
+    #[error("Failed to create/truncate file [Shard {0}, ({1})]")]
+    CreateTruncate(usize, std::io::Error),
+
+    /// Failed to write to file from shard
+    #[error("Failed to write to file [Shard {0}, ({1})]")]
+    Write(usize, std::io::Error),
+
+    /// Failed to flush to file form shard
+    #[error("Failed to flush file [Shard {0}, ({1})]")]
+    Flush(usize, std::io::Error),
+    
+    /// Database directory was not set during ExtractDb initialization.
+    #[error("No database directory is set. Cannot save to disk without a valid path set!")]
+    NoDirectory,
+    
+    /// std::io::Error occurred during saving 
+    #[error(transparent)]
+    Io(#[from] std::io::Error)
+}
+
 impl<V> ExtractDb<V>
     where
         V: Eq + Hash + Clone + Send + Sync + Encode + for<'a> Decode<'a>
@@ -401,9 +428,9 @@ impl<V> ExtractDb<V>
     ///
     /// # Errors
     /// [`Box<dyn Error>`] may return if database directory is not set or if saving fails.
-    pub fn save_to_disk(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn save_to_disk(&self) -> Result<(), SaveError> {
         let Some(database_directory) = &self.config.database_directory else {
-            return Err("No database directory is set. Cannot save to disk without a valid path set!".into())
+            return Err(SaveError::NoDirectory)
         };
 
         let store_directory = database_directory.join("store");
@@ -424,10 +451,10 @@ impl<V> ExtractDb<V>
         let store_results = self.shards
             .par_iter()
             .enumerate()
-            .try_for_each(|(id, shard)| -> Result<(), Box<dyn Error + Send + Sync>> {
+            .try_for_each(|(id, shard)| -> Result<(), SaveError> {
                 let store_shard = shard.data_store
                     .read()
-                    .map_err(|_| format!("Shard ({id}) failed to read lock"))?;
+                    .map_err(|_| SaveError::ShardLock(id))?;
 
                 let internal_data: Vec<u64> = store_shard.clone().into_iter().collect();
                 let encoded_data = bitcode::encode(&internal_data);
@@ -435,30 +462,28 @@ impl<V> ExtractDb<V>
                 let file_shard_path = &store_directory.join(format!("{id}"));
 
                 let mut file_shard = File::create(file_shard_path)
-                    .map_err(|err| format!("Failed to create/truncate file for Shard {id}, ({err})"))?;
+                    .map_err(|err| SaveError::CreateTruncate(id, err))?;
 
                 file_shard
                     .write_all(&encoded_data)
-                    .map_err(|err| format!("Failed to write to File Shard {id}, ({err})"))?;
+                    .map_err(|err| SaveError::Write(id, err))?;
 
                 file_shard
                     .flush()
-                    .map_err(|err| format!("Failed to flush File Shard {id}, ({err})"))?;
+                    .map_err(|err| SaveError::Flush(id, err))?;
 
                 Ok(())
             });
 
-        if store_results.is_err() {
-            return Err(format!("Unable to save hash data_store to disk. (Error: {:#?})", store_results.err()).into())
-        }
+        store_results?;
 
         let disk_results = self.shards
             .par_iter()
             .enumerate()
-            .try_for_each(|(id, shard)| -> Result<(), Box<dyn Error + Send + Sync>> {
+            .try_for_each(|(id, shard)| -> Result<(), SaveError> {
                 let mut data_shard = shard.disk_queue
                     .write()
-                    .map_err(|_| format!("Data shard ({id}) failed to read lock"))?;
+                    .map_err(|_| SaveError::ShardLock(id))?;
                 
                 let internal_data: Vec<Arc<V>> = data_shard
                     .drain(..)
@@ -473,22 +498,20 @@ impl<V> ExtractDb<V>
                 let file_shard_path = &data_directory.join(format!("{id}-{}", Utc::now().timestamp()));
 
                 let mut file_shard = File::create(file_shard_path)
-                    .map_err(|err| format!("Failed to create/truncate file for Shard {id}, ({err})"))?;
+                    .map_err(|err| SaveError::CreateTruncate(id, err))?;
 
                 file_shard
                     .write_all(&encoded_data)
-                    .map_err(|err| format!("Failed to write to File Shard {id}, ({err})"))?;
+                    .map_err(|err| SaveError::Write(id, err))?;
 
                 file_shard
                     .flush()
-                    .map_err(|err| format!("Failed to flush File Shard {id}, ({err})"))?;
+                    .map_err(|err| SaveError::Flush(id, err))?;
 
                 Ok(())
             });
 
-        if disk_results.is_err() {
-            return Err(format!("Unable to save data_queue to disk. (Error: {:#?})", disk_results.err()).into())
-        }
+        disk_results?;
 
         Ok(())
     }
