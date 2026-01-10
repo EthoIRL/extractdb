@@ -53,6 +53,26 @@ impl ExtractConfig {
         self.database_directory = directory;
         self
     }
+    
+    /// Returns the current shard_count
+    pub fn get_shard_count(&self) -> usize {
+        self.shard_count
+    }
+    
+    /// Returns the current optimistic_read state
+    pub fn get_optimistic_read(&self) -> bool {
+        self.optimistic_read
+    }
+    
+    /// Returns the current drain_size
+    pub fn get_drain_size(&self) -> usize {
+        self.drain_size
+    }
+    
+    /// Returns the current database_directory optional
+    pub fn get_database_directory(&self) -> &Option<PathBuf> {
+        &self.database_directory
+    }
 }
 
 /// Configuration settings for the provided [`ExtractDb::background_checkpoints`].
