@@ -51,7 +51,7 @@ fn push_collided() {
     assert_eq!(db.internal_count(), 1);
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Encode, Decode)]
+#[derive(Eq, PartialEq, Hash, Clone, Encode, Decode, Debug)]
 struct TestStructure {
     id: u64,
     duration: Option<Duration>,
