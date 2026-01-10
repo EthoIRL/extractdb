@@ -5,6 +5,7 @@ use std::error::Error;
 use std::fs::File;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::io::{Read, Write};
+use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
@@ -206,6 +207,54 @@ pub enum SaveError {
     /// std::io::Error occurred during saving 
     #[error(transparent)]
     Io(#[from] std::io::Error)
+}
+
+#[derive(Error, Debug)]
+pub enum LoadError {
+    /// Database directory was not set during ExtractDb initialization
+    #[error("No database directory is set. Cannot save to disk without a valid path set!")]
+    NoDirectory,
+    
+    /// Failed to locate the file at it's specified location
+    #[error("Could not locate file entry")]
+    MissingEntry,
+    
+    /// Database has files missing in either the store or data directories
+    #[error("No files are present in the database directory.")]
+    MissingFiles,
+
+    /// Failed to open file  
+    #[error("Failed to open file. Skipping ({0})")]
+    Open(std::io::Error),
+
+    /// Failed to read file 
+    #[error("Failed to read file. Skipping ({0})")]
+    Read(std::io::Error),
+    
+    /// Failed to decode file shard data
+    #[error("Failed to decode shard file. Skipping ({0})")]
+    Decode(bitcode::Error),
+    
+    /// Failed to extract filename from shard file
+    #[error("Failed to get file_name. Skipping ({0})")]
+    Filename(String),
+    
+    /// Failed to convert filename to shard number
+    #[error("Failed to convert string to number. Skipping (File: {0}, Err: {1})")]
+    ShardName(String, ParseIntError),
+    
+    /// Soft error: This can be treated as a warning rather than an error
+    /// Store or data is miss-matched in save shard size. This is recoverable to a degree.
+    #[error("Soft error: Shard store/data miss-match, converting to current shard_size")]
+    ShardMismatch,
+    
+    /// File contains no data
+    #[error("Missing or no data present within file. Skipping ({0})")]
+    NoData(String),
+    
+    /// Failed to extract shard id from file name
+    #[error("Failed to extract shard number from file. Skipping ({0})")]
+    ShardIdExtraction(String)
 }
 
 impl<V> ExtractDb<V>
@@ -525,9 +574,9 @@ impl<V> ExtractDb<V>
     /// # Errors
     /// [`Box<dyn Error + Send + Sync>`] may return if any form of corruption occurs, or if a shard size changes.
     /// **Missing any store files will be considered fully corrupted. While data files will be recovered to the best of its ability without an error.**
-    pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn load_from_disk(&self, re_enqueue: bool) -> Result<(), LoadError> {
         let Some(database_directory) = &self.config.database_directory else {
-            return Err("No database directory is set. Cannot load from disk without a valid path set!".into())
+            return Err(LoadError::NoDirectory)
         };
 
         let store_directory = database_directory.join("store");
@@ -546,11 +595,11 @@ impl<V> ExtractDb<V>
         }
         
         let Ok(store_files) = fs::read_dir(&store_directory) else {
-            return Err("No files present in database store directory.".into())
+            return Err(LoadError::MissingFiles);
         };
 
         let Ok(data_files) = fs::read_dir(&data_directory) else {
-            return Err("No files present in database data directory.".into())
+            return Err(LoadError::MissingFiles);
         };
 
         let shard_mismatch: bool = {
@@ -596,35 +645,35 @@ impl<V> ExtractDb<V>
             store_mismatch || data_mismatch
         };
 
-        let store_load_results: Vec<Result<(), Box<dyn Error + Send + Sync>>> = store_files
+        let store_load_results: Vec<Result<(), LoadError>> = store_files
             .par_bridge()
-            .map(|potential_file| -> Result<(), Box<dyn Error + Send + Sync>> {
+            .map(|potential_file| -> Result<(), LoadError> {
                 let file_entry = potential_file
-                    .map_err(|_| "No file found in dir_entry")?;
+                    .map_err(|_| LoadError::MissingEntry)?;
 
                 let mut file = File::open(file_entry.path())
-                    .map_err(|err| format!("Failed to open file. Skipping (Err: {err})"))?;
+                    .map_err(|err| LoadError::Open(err))?;
                 let mut file_data: Vec<u8> = Vec::new();
 
                 let size = file.read_to_end(&mut file_data)
-                    .map_err(|err| format!("Failed to read file. Skipping (Err: {err})"))?;
+                    .map_err(|err| LoadError::Read(err))?;
 
                 if size == 0 {
                     return Ok(());
                 }
 
                 let decoded_shard_data: Vec<u64> = bitcode::decode(&file_data)
-                    .map_err(|err| format!("Failed to decode shard file data. Skipping (Err: {err})"))?;
+                    .map_err(|err| LoadError::Decode(err))?;
 
                 let file_name = match file_entry.file_name().to_str() {
                     Some(data) => data.to_string(),
                     None => {
-                        return Err(format!("Failed to get file_name. Skipping (File: {})", file_entry.path().display()).into());
+                        return Err(LoadError::Filename(file_entry.path().display().to_string()));
                     }
                 };
 
                 let shard_id = usize::from_str(&file_name)
-                    .map_err(|err| format!("Failed to convert string to number. Skipping (File: {}, Err: {})", file_entry.path().display(), err))?;
+                    .map_err(|err| LoadError::ShardName(file_entry.path().display().to_string(), err))?;
 
                 if shard_mismatch {
                     decoded_shard_data.into_par_iter().for_each(|item| {
@@ -637,7 +686,7 @@ impl<V> ExtractDb<V>
                         }
                     });
 
-                    return Err("Soft error: Shard store miss-match, converting to current shard_size!".into());
+                    return Err(LoadError::ShardMismatch);
                 }
 
                 if let Ok(mut data_shard) = self.shards[shard_id].data_store.write() {
@@ -650,39 +699,39 @@ impl<V> ExtractDb<V>
             }).collect();
 
         if re_enqueue {
-            let data_load_results: Vec<Result<(), Box<dyn Error + Send + Sync>>> = data_files
+            let data_load_results: Vec<Result<(), LoadError>> = data_files
                 .par_bridge()
-                .map(|potential_file| -> Result<(), Box<dyn Error + Send + Sync>> {
+                .map(|potential_file| -> Result<(), LoadError> {
                     let file_entry = potential_file
-                        .map_err(|_| "No file found in dir_entry")?;
+                        .map_err(|_| LoadError::MissingEntry)?;
 
                     let mut file = File::open(file_entry.path())
-                        .map_err(|err| format!("Failed to open file. Skipping (Err: {err})"))?;
+                        .map_err(|err| LoadError::Open(err))?;
                     let mut file_data: Vec<u8> = Vec::new();
 
                     let size = file.read_to_end(&mut file_data)
-                        .map_err(|err| format!("Failed to read file. Skipping (Err: {err})"))?;
+                        .map_err(|err| LoadError::Read(err))?;
 
                     if size == 0 {
-                        return Err(format!("No data to read in file. Skipping ({})", file_entry.path().display()).into());
+                        return Err(LoadError::NoData(file_entry.path().display().to_string()));
                     }
 
                     let decoded_shard_data: Vec<V> = bitcode::decode(&file_data)
-                        .map_err(|err| format!("Failed to decode shard file data. Skipping (Err: {err})"))?;
+                        .map_err(|err| LoadError::Decode(err))?;
 
                     let file_name = match file_entry.file_name().to_str() {
                         Some(data) => data.to_string(),
                         None => {
-                            return Err(format!("Failed to get file_name. Skipping (File: {})", file_entry.path().display()).into());
+                            return Err(LoadError::Filename(file_entry.path().display().to_string()));
                         }
                     };
                     
                     let shard_file_name = file_name.split_once("-")
                         .map(|(before, _)| before)
-                        .ok_or_else(|| format!("Failed to get shard_id from file_name. Skipping (File {})", file_entry.path().display()))?;
+                        .ok_or_else(|| LoadError::ShardIdExtraction(file_entry.path().display().to_string()))?;
 
                     let shard_id = usize::from_str(&shard_file_name)
-                        .map_err(|err| format!("Failed to convert string to number. Skipping (File: {}, Err: {})", file_entry.path().display(), err))?;
+                        .map_err(|err| LoadError::ShardName(file_entry.path().display().to_string(), err))?;
 
                     if shard_mismatch {
                         for decoded_datum in decoded_shard_data {
@@ -696,7 +745,7 @@ impl<V> ExtractDb<V>
                             }
                         }
                     
-                        return Err("Soft error: Shard data miss-match, converting to current shard_size!".into());
+                        return Err(LoadError::ShardMismatch);
                     }
 
                     for decoded_datum in decoded_shard_data {
