@@ -18,6 +18,8 @@ fn save_state_to_disk() {
     
     let database: ExtractDb<i32> = ExtractDb::new(config);    
 
+    assert_eq!(database.get_config().get_shard_count(), 32);
+    
     for i in 0..10000 {
         assert_eq!(database.push(Arc::new(i)), true);
     }
