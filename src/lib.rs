@@ -5,7 +5,6 @@ use std::{fs, thread};
 use std::fs::File;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::io::{Read, Write};
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,9 +16,12 @@ use concurrent_queue::{ConcurrentQueue, PushError};
 use hashbrown::HashSet;
 use rayon::iter::{ParallelIterator, IndexedParallelIterator, IntoParallelRefIterator, ParallelBridge, IntoParallelIterator};
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
-use crate::error::{FetchError, LoadError, SaveError};
 
-pub mod error;
+pub use crate::config::ExtractConfig;
+pub use crate::error::{FetchError, LoadError, SaveError};
+
+mod error;
+mod config;
 
 /// [`ExtractDb`] is a thread-safe, in-memory hash store supporting concurrent fetches and writes.
 ///
