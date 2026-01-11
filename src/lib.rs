@@ -132,7 +132,7 @@ impl<V> ExtractDb<V>
     /// // In-memory only example, set a path for save/loading.
     /// let db: ExtractDb<String> = ExtractDb::default();
     ///
-    /// assert_eq!(db.push(Arc::new("Hello ExtractDb!".to_string())), true);
+    /// assert!(db.push(Arc::new("Hello ExtractDb!".to_string())).is_ok());
     /// ```
     pub fn new(mut config: ExtractConfig) -> ExtractDb<V> {
         if !config.shard_count.is_power_of_two() {
@@ -170,18 +170,15 @@ impl<V> ExtractDb<V>
     ///
     /// let db: ExtractDb<i32> = ExtractDb::default();
     ///
-    /// assert_eq!(db.push(Arc::new(100)), true);
-    /// assert_eq!(db.push(Arc::new(100)), false);
+    /// assert!(db.push(Arc::new(100)).is_ok());
+    /// assert!(db.push(Arc::new(100)).is_err());
     /// assert_eq!(db.internal_count(), 1);
     /// ```
-    pub fn push(&self, value: Arc<V>) -> bool {
+    pub fn push(&self, value: Arc<V>) -> Result<(), PushError> {
         let hash = self.data_hasher.hash_one(&value);
         let shard_index = hash & self.shard_mask;
 
-        match self.push_shard(value, shard_index as usize, hash) {
-            Ok(_) => true,
-            Err(_) => false
-        }
+        self.push_shard(value, shard_index as usize, hash)
     }
 
     fn push_shard(&self, value: Arc<V>, shard_index: usize, hash: u64) -> Result<(), PushError> {
@@ -227,7 +224,7 @@ impl<V> ExtractDb<V>
     ///
     /// let db: ExtractDb<String> = ExtractDb::default();
     ///
-    /// assert_eq!(db.push(Arc::new("hello world".to_string())), true);
+    /// assert!(db.push(Arc::new("hello world".to_string())).is_ok());
     /// assert_eq!(db.fetch_next().unwrap(), Arc::new("hello world".to_string()));
     /// assert_eq!(db.internal_count(), 1);
     /// assert_eq!(db.fetch_count(), 0);
@@ -275,7 +272,7 @@ impl<V> ExtractDb<V>
     ///
     /// let db: ExtractDb<u8> = ExtractDb::default();
     ///
-    /// assert_eq!(db.push(Arc::new(20)), true);
+    /// assert!(db.push(Arc::new(20)).is_ok());
     /// assert_eq!(db.fetch_count(), 0); // No data is currently loaded
     /// assert_eq!(db.fetch_next().unwrap(), Arc::new(20)); // Causes a load for the non-mutable vector
     /// assert_ne!(db.fetch_count(), 1);
@@ -299,7 +296,7 @@ impl<V> ExtractDb<V>
     /// let db: ExtractDb<u8> = ExtractDb::default();
     ///
     /// for i in 0..128 {
-    ///     assert_eq!(db.push(Arc::new(i)), true);
+    ///     assert!(db.push(Arc::new(i)).is_ok());
     /// }
     /// assert_eq!(db.internal_count(), 128);
     /// ```

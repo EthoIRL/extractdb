@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use bitcode::{Decode, Encode};
-use extractdb::ExtractDb;
+use extractdb::{ExtractDb, PushError};
 
 /// Attempts to insert a single value map into the ExtractDb<i32>
 ///
@@ -14,7 +14,7 @@ use extractdb::ExtractDb;
 fn push() {
     let db: ExtractDb<i32> = ExtractDb::default();
 
-    db.push(Arc::new(100));
+    assert!(db.push(Arc::new(100)).is_ok());
 
     assert_eq!(db.internal_count(), 1);
 }
@@ -29,7 +29,7 @@ fn push_multiple() {
     let db: ExtractDb<i32> = ExtractDb::default();
 
     for count in 0..128 {
-        db.push(Arc::new(count));
+        assert!(db.push(Arc::new(count)).is_ok());
     }
 
     assert_eq!(db.internal_count(), 128);
@@ -45,8 +45,8 @@ fn push_multiple() {
 fn push_collided() {
     let db: ExtractDb<i32> = ExtractDb::default();
 
-    db.push(Arc::new(10));
-    db.push(Arc::new(10));
+    assert!(db.push(Arc::new(10)).is_ok());
+    assert!(matches!(db.push(Arc::new(10)), Err(PushError::Collision)));
 
     assert_eq!(db.internal_count(), 1);
 }
@@ -109,7 +109,7 @@ fn push_structure() {
     let dependencies: Vec<u64> = vec![0, 28291928, 100];
     let confidence = 100;
 
-    database.push(Arc::new(TestStructure {
+    assert!(database.push(Arc::new(TestStructure {
         id,
         duration,
         retries,
@@ -122,7 +122,7 @@ fn push_structure() {
         error_code,
         dependencies: dependencies.clone(),
         confidence,
-    }));
+    })).is_ok());
 
     let structure_fetch = database.fetch_next();
 
@@ -153,10 +153,10 @@ fn push_structure() {
 fn count_empty_store() {
     let db: ExtractDb<i32> = ExtractDb::default();
 
-    db.push(Arc::new(0));
-    db.push(Arc::new(10));
-    db.push(Arc::new(100));
-    db.push(Arc::new(1000));
+    assert!(db.push(Arc::new(0)).is_ok());
+    assert!(db.push(Arc::new(10)).is_ok());
+    assert!(db.push(Arc::new(100)).is_ok());
+    assert!(db.push(Arc::new(1000)).is_ok());
 
     assert_eq!(db.fetch_count(), 0);
 }
@@ -171,10 +171,10 @@ fn count_empty_store() {
 fn count_loaded_store() {
     let db: ExtractDb<i32> = ExtractDb::default();
 
-    db.push(Arc::new(0));
-    db.push(Arc::new(10));
-    db.push(Arc::new(100));
-    db.push(Arc::new(1000));
+    assert!(db.push(Arc::new(0)).is_ok());
+    assert!(db.push(Arc::new(10)).is_ok());
+    assert!(db.push(Arc::new(100)).is_ok());
+    assert!(db.push(Arc::new(1000)).is_ok());
 
     db.fetch_next().unwrap();
 
@@ -190,8 +190,8 @@ fn count_loaded_store() {
 fn fetch_data() {
     let db: ExtractDb<i32> = ExtractDb::default();
 
-    db.push(Arc::new(0));
-    db.push(Arc::new(1000));
+    assert!(db.push(Arc::new(0)).is_ok());
+    assert!(db.push(Arc::new(1000)).is_ok());
 
     assert!(db.fetch_next().is_ok());
 }
@@ -206,7 +206,7 @@ fn fetch_data_multiple() {
     let database: ExtractDb<i64> = ExtractDb::default();
 
     for i in 0..128 {
-        database.push(Arc::new(i));
+        assert!(database.push(Arc::new(i)).is_ok());
     }
 
     for _ in 0..128 {
@@ -231,7 +231,7 @@ fn fetch_data_empty() {
 fn duplicate_fetch() {
     let database: ExtractDb<i64> = ExtractDb::default();
 
-    assert_eq!(database.push(Arc::new(-1)), true);
+    assert!(database.push(Arc::new(-1)).is_ok());
     assert_eq!(database.fetch_count(), 0);
 
     let initial_value = database.fetch_next().unwrap();
@@ -239,13 +239,13 @@ fn duplicate_fetch() {
     assert_eq!(initial_value, Arc::from(-1));
 
     for i in 0..100 {
-        assert_eq!(database.push(Arc::new(i)), true);
+        assert!(database.push(Arc::new(i)).is_ok());
     }
 
     assert_eq!(database.fetch_count(), 0);
 
     for i in 0..100 {
-        assert_eq!(database.push(Arc::new(i + 1000)), true);
+        assert!(database.push(Arc::new(i + 1000)).is_ok());
     }
 
     for _ in 0..200 {

@@ -18,7 +18,7 @@ fn push_multi_thread() {
         let reference_database = Arc::clone(&database);
         threads.push(thread::spawn(move || {
             for count in 0..insertion_count {
-                reference_database.push(Arc::new(format!("{}-{}", thread_id, count)));
+                assert!(reference_database.push(Arc::new(format!("{}-{}", thread_id, count))).is_ok());
             }
         }));
     }

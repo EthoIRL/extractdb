@@ -21,7 +21,7 @@ fn save_state_to_disk() {
     assert_eq!(database.get_config().get_shard_count(), 32);
     
     for i in 0..10000 {
-        assert_eq!(database.push(Arc::new(i)), true);
+        assert!(database.push(Arc::new(i)).is_ok());
     }
 
     assert!(database.save_to_disk().is_ok());
@@ -63,7 +63,7 @@ fn load_state_from_disk() {
     let database: ExtractDb<String> = ExtractDb::new(config.clone());
 
     for i in 0..10000 {
-        assert_eq!(database.push(Arc::new(format!("Id: {}", i))), true);
+        assert!(database.push(Arc::new(format!("Id: {}", i))).is_ok());
     }
 
     assert!(database.save_to_disk().is_ok());
@@ -101,7 +101,7 @@ fn load_corrupted_state_from_disk() {
     let database: ExtractDb<String> = ExtractDb::new(config.clone());
 
     for i in 0..10000 {
-        assert_eq!(database.push(Arc::new(format!("Id: {}", i))), true);
+        assert!(database.push(Arc::new(format!("Id: {}", i))).is_ok());
     }
 
     assert!(database.save_to_disk().is_ok());
@@ -151,7 +151,7 @@ fn load_shard_mismatch_from_disk() {
     let database: ExtractDb<u64> = ExtractDb::new(config.clone());
 
     for i in 0..10000 {
-        assert_eq!(database.push(Arc::new(i)), true);
+        assert!(database.push(Arc::new(i)).is_ok());
     }
 
     assert!(database.save_to_disk().is_ok());
@@ -189,7 +189,7 @@ fn load_mismatch_type_from_disk() {
     let database: ExtractDb<u64> = ExtractDb::new(config.clone());
 
     for i in 0..10000 {
-        assert_eq!(database.push(Arc::new(i)), true);
+        assert!(database.push(Arc::new(i)).is_ok());
     }
 
     assert!(database.save_to_disk().is_ok());
