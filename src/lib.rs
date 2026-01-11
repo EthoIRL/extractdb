@@ -2,7 +2,7 @@
 #![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
 
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 
 use bitcode::{Decode, Encode};
 use concurrent_queue::{ConcurrentQueue, PushError as CQPushError};
@@ -241,6 +241,28 @@ impl<V> ExtractDb<V>
             .map_err(|err| err.into())
     }
 
+    fn load_shards_to_accessible(&self) -> Result<(), CQPushError<Arc<V>>>  {
+        for shard in &self.shards {
+            let shard_drain: Vec<Arc<V>> = match shard.insertion_queue.write() {
+                Ok(mut write_queue ) => {
+                    if write_queue.is_empty() {
+                        continue;
+                    }
+
+                    let drain_amount = usize::min(write_queue.len(), self.config.drain_size);
+                    write_queue.drain(..drain_amount).collect()
+                },
+                Err(_) => continue
+            };
+
+            for item in shard_drain {
+                self.removal_store.push(item)?
+            }
+        }
+
+        Ok(())
+    }
+
     /// Get the current count of the `fetch_next` mutable queue
     ///
     /// # Returns
@@ -292,28 +314,6 @@ impl<V> ExtractDb<V>
         global_shard_size
     }
 
-    fn load_shards_to_accessible(&self) -> Result<(), CQPushError<Arc<V>>>  {
-        for shard in &self.shards {
-            let shard_drain: Vec<Arc<V>> = match shard.insertion_queue.write() {
-                Ok(mut write_queue ) => {
-                    if write_queue.is_empty() {
-                        continue;
-                    }
-                    
-                    let drain_amount = usize::min(write_queue.len(), self.config.drain_size);
-                    write_queue.drain(..drain_amount).collect()
-                },
-                Err(_) => continue
-            };
-
-            for item in shard_drain {
-                self.removal_store.push(item)?
-            }
-        }
-
-        Ok(())
-    }
-    
     /// Exposes the internal config used to create the [`ExtractDb`] database.
     /// 
     /// # Returns
