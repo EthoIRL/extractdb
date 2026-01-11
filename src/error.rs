@@ -5,9 +5,11 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum PushError {
+    /// Soft error: Database already contains the pushed item
     #[error("Soft error: database already contains item")]
     Collision,
     
+    /// One of the internal locks has been poisoned
     #[error("Internal lock error: lock has been poisoned good luck")]
     PoisonLock
 }
