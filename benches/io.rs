@@ -54,7 +54,7 @@ mod push {
             })
             .counter(ItemsCount::new(1u8))
             .bench_values(|(db, val)| {
-                db.push(val);
+                db.push(val)
             });
     }
 
@@ -72,7 +72,7 @@ mod push {
             })
             .counter(ItemsCount::new(1u8))
             .bench_values(|(db, val)| { 
-                db.push(val);
+                db.push(val)
             });
     }
 }
@@ -94,7 +94,7 @@ mod fetch {
         bencher
             .with_inputs(|| {
                 let payload: Arc<String> = Arc::new((0..payload_length).map(|_| fastrand::char(..)).collect());
-                database.push(payload);
+                _ = database.push(payload);
 
                 database.clone()
             })
@@ -118,7 +118,7 @@ mod fetch {
             })
             .counter(ItemsCount::new(1u8))
             .bench_values(|(db, val)| {
-                divan::black_box(db.push(val));
+                _ = divan::black_box(db.push(val));
                 _ = divan::black_box(db.fetch_next());
             });
     }
