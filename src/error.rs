@@ -1,13 +1,29 @@
 use std::num::ParseIntError;
-use concurrent_queue::{PopError, PushError};
+use std::sync::PoisonError;
+use concurrent_queue::{PopError, PushError as CQPushError};
 use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum PushError {
+    #[error("Soft error: database already contains item")]
+    Collision,
+    
+    #[error("Internal lock error: lock has been poisoned good luck")]
+    PoisonLock
+}
+
+impl<T> From<PoisonError<T>> for PushError {
+    fn from(_: PoisonError<T>) -> Self {
+        PushError::PoisonLock
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum FetchError<V>
 {
     /// Failed to load shard internal data into removal store queue 
     #[error(transparent)]
-    Push(#[from] PushError<V>),
+    Push(#[from] CQPushError<V>),
 
     /// Failed to pop data from internal removal_store
     #[error(transparent)]

@@ -2,17 +2,15 @@
 #![cfg_attr(not(doctest), doc = include_str!("../README.md"))]
 
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::AtomicBool;
-use std::time::Duration;
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use bitcode::{Decode, Encode};
-use concurrent_queue::{ConcurrentQueue, PushError};
+use concurrent_queue::{ConcurrentQueue, PushError as CQPushError};
 use hashbrown::HashSet;
 use xxhash_rust::xxh3::Xxh3DefaultBuilder;
 
 pub use crate::config::{CheckpointSettings, ExtractConfig};
-pub use crate::error::{FetchError, LoadError, SaveError};
+pub use crate::error::{FetchError, LoadError, SaveError, PushError};
 
 mod error;
 mod config;
@@ -180,45 +178,36 @@ impl<V> ExtractDb<V>
         let hash = self.data_hasher.hash_one(&value);
         let shard_index = hash & self.shard_mask;
 
-        self.push_shard(value, shard_index as usize, hash)
+        match self.push_shard(value, shard_index as usize, hash) {
+            Ok(_) => true,
+            Err(_) => false
+        }
     }
 
-    fn push_shard(&self, value: Arc<V>, shard_index: usize, hash: u64) -> bool {
+    fn push_shard(&self, value: Arc<V>, shard_index: usize, hash: u64) -> Result<(), PushError> {
         if self.config.optimistic_read {
-            match self.shards[shard_index].data_store.read() {
-                Ok(data_shard) => {
-                    if data_shard.contains(&hash) {
-                        return false;
-                    }
-                },
-                Err(_) => return false
+            let data_shard = self.shards[shard_index].data_store.read()?;
+            if data_shard.contains(&hash) {
+                return Err(PushError::Collision);
             }
+            drop(data_shard);
         }
 
-        match self.shards[shard_index].data_store.write() {
-            Ok(mut data_shard) => {
-                if !data_shard.insert(hash) {
-                    return false;
-                }
-            },
-            Err(_) => return false
+        let mut data_shard = self.shards[shard_index].data_store.write()?;
+        if !data_shard.insert(hash) {
+            return Err(PushError::Collision);
         }
+        drop(data_shard);
 
-        match self.shards[shard_index].disk_queue.write() {
-            Ok(mut queue) => {
-                queue.push(Arc::clone(&value));
-            },
-            Err(_) => return false
-        }
-
-        match self.shards[shard_index].insertion_queue.write() {
-            Ok(mut queue) => {
-                queue.push(value);
-            },
-            Err(_) => return false
-        }
-
-        true
+        let mut queue = self.shards[shard_index].disk_queue.write()?;
+        queue.push(Arc::clone(&value));
+        drop(queue);
+        
+        let mut queue = self.shards[shard_index].insertion_queue.write()?;
+        queue.push(value);
+        drop(queue);
+        
+        Ok(())
     }
 
     /// Fetches a unique item from an internal queue
@@ -303,7 +292,7 @@ impl<V> ExtractDb<V>
         global_shard_size
     }
 
-    fn load_shards_to_accessible(&self) -> Result<(), PushError<Arc<V>>>  {
+    fn load_shards_to_accessible(&self) -> Result<(), CQPushError<Arc<V>>>  {
         for shard in &self.shards {
             let shard_drain: Vec<Arc<V>> = match shard.insertion_queue.write() {
                 Ok(mut write_queue ) => {
