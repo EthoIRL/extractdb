@@ -95,6 +95,7 @@ impl ExtractConfig {
 /// // Gracefully shutdown a background thread
 /// shutdown_flag.store(true, Ordering::Relaxed);
 /// ```
+#[derive(Clone)]
 pub struct CheckpointSettings {
     /// Interval at which the `internal_count` is checked
     ///
