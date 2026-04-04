@@ -163,6 +163,9 @@ impl<V> ExtractDb<V>
     ///
     /// ``False``: if data has already been added to a hashset, or if the internal shard is poisoned
     ///
+    /// # Errors
+    /// [`PushError`] may return when an object collides, but this is a soft error and can be ignored. It also handles poison lock errors. See [`PushError`] doc for more info.
+    ///
     /// # Examples
     /// ```rust
     /// use extractdb::ExtractDb;

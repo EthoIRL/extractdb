@@ -3,14 +3,18 @@ use std::sync::PoisonError;
 use concurrent_queue::{PopError, PushError as CQPushError};
 use thiserror::Error;
 
+/// An error wrapper used by ExtractDb::push
+/// 
+/// [`PushError`] may return when an object collides, but this is a soft error and can be ignored. It also handles poison lock errors.
 #[derive(Error, Debug)]
 pub enum PushError {
     /// Soft error: Database already contains the pushed item
-    #[error("Soft error: database already contains item")]
+    /// This error can outright ignored, and or treated like a warning. 
+    #[error("Database already contains item")]
     Collision,
     
     /// One of the internal locks has been poisoned
-    #[error("Internal lock error: lock has been poisoned good luck")]
+    #[error("Internal lock has been poisoned good luck")]
     PoisonLock
 }
 
@@ -20,10 +24,13 @@ impl<T> From<PoisonError<T>> for PushError {
     }
 }
 
+/// An error wrapper used by ExtractDb::fetch_next
+///
+/// [`FetchError<V>`] may return if queue is empty or if loading has a critical error.
 #[derive(Error, Debug)]
 pub enum FetchError<V>
 {
-    /// Failed to load shard internal data into removal store queue 
+    /// Failed to load shard internal data into removal store queue
     #[error(transparent)]
     Push(#[from] CQPushError<V>),
 
@@ -32,9 +39,12 @@ pub enum FetchError<V>
     Pop(#[from] PopError),
 }
 
+/// An error wrapper used by ExtractDb::disk::save_to_disk
+///
+/// [`SaveError`] may be returned if the database directory is not set, or if saving fails entirely.
 #[derive(Error, Debug)]
 pub enum SaveError {
-    /// Failed to lock data_store or disk_queue from shard 
+    /// Failed to lock data_store or disk_queue from shard
     #[error("Failed to read lock [Shard {0}]")]
     ShardLock(usize),
 
@@ -54,11 +64,15 @@ pub enum SaveError {
     #[error("No database directory is set. Cannot save to disk without a valid path set!")]
     NoDirectory,
 
-    /// std::io::Error occurred during saving 
+    /// std::io::Error occurred during saving
     #[error(transparent)]
     Io(#[from] std::io::Error)
 }
 
+/// An error wrapper used by ExtractDb::disk::load_from_disk
+/// 
+/// [`LoadError] may return if any form of corruption occurs, or if a shard size changes.
+/// **Missing any store files will be considered fully corrupted. While data files will be recovered to the best of its ability without an error.**
 #[derive(Error, Debug)]
 pub enum LoadError {
     /// Database directory was not set during ExtractDb initialization
@@ -73,11 +87,11 @@ pub enum LoadError {
     #[error("No files are present in the database directory.")]
     MissingFiles,
 
-    /// Failed to open file  
+    /// Failed to open file
     #[error("Failed to open file. Skipping ({0})")]
     Open(std::io::Error),
 
-    /// Failed to read file 
+    /// Failed to read file
     #[error("Failed to read file. Skipping ({0})")]
     Read(std::io::Error),
 
